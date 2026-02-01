@@ -56,6 +56,13 @@ export const superAdminService = {
   createCompany: (data) => api.post('/saas/create_company', data),
   getCompanies: () => api.get('/saas/companies'),
   getHardware: () => api.get('/saas/hardware'),
+
+
+  // [NEW] Delete Company
+  deleteCompany: (id) => api.delete(`/saas/companies/${id}`),
+
+  // [NEW] Update Hardware
+  updateHardware: (id, type) => api.put(`/saas/hardware/${id}`, { device_type: type }),
   
   // 🚨 IoT Remote Open
   emergencyOpen: (companyId, deviceId, reason) => api.post('/admin/door/emergency-open', {

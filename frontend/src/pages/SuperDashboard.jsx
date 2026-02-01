@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { superAdminService } from '../services/api';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import { Server, Shield, LogOut } from 'lucide-react';
+import { Server, Shield, LogOut, Trash2, Settings, Save } from 'lucide-react';
 
 const SuperDashboard = () => {
   const [companies, setCompanies] = useState([]);
   const [hardware, setHardware] = useState([]);
   const [newCo, setNewCo] = useState({ name: '', admin_username: '', admin_pass: '', plan: 'basic', hardware_type: 'ESP32' });
+  const [editingHw, setEditingHw] = useState(null); // Track which hardware is being edited
   const navigate = useNavigate();
 
   useEffect(() => { loadData(); }, []);
@@ -18,7 +19,8 @@ const SuperDashboard = () => {
         superAdminService.getCompanies(),
         superAdminService.getHardware()
       ]);
-      setCompanies(coRes.data);
+      // Filter out deleted companies if using soft delete
+      setCompanies(coRes.data.filter(c => c.status !== 'deleted'));
       setHardware(hwRes.data);
     } catch (err) { toast.error("Failed to load data"); }
   };
@@ -30,6 +32,26 @@ const SuperDashboard = () => {
       toast.success("Company Created!");
       loadData();
     } catch (err) { toast.error(err.response?.data?.detail || "Error"); }
+  };
+
+  // [NEW] Delete Function
+  const handleDelete = async (id) => {
+    if(!window.confirm("Are you sure? This will disable the company.")) return;
+    try {
+      await superAdminService.deleteCompany(id);
+      toast.success("Company Deleted");
+      loadData();
+    } catch (err) { toast.error("Delete failed"); }
+  };
+
+  // [NEW] Update Hardware Function
+  const handleUpdateHardware = async (id, newType) => {
+    try {
+      await superAdminService.updateHardware(id, newType);
+      toast.success("Hardware Updated");
+      setEditingHw(null);
+      loadData();
+    } catch (err) { toast.error("Update failed"); }
   };
 
   return (
@@ -44,7 +66,7 @@ const SuperDashboard = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Create Company Form */}
-          <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+          <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 h-fit">
             <h2 className="font-bold mb-4 text-emerald-400">🚀 Deploy New Tenant</h2>
             <form onSubmit={handleCreate} className="space-y-3">
               <input placeholder="Company Name" className="w-full bg-slate-900 border border-slate-700 p-2 rounded text-white" 
@@ -62,30 +84,88 @@ const SuperDashboard = () => {
             </form>
           </div>
 
-          {/* Hardware Status */}
-          <div className="lg:col-span-2 bg-slate-800 p-6 rounded-xl border border-slate-700">
-            <h2 className="font-bold mb-4 flex items-center gap-2"><Server size={20} className="text-blue-400"/> Hardware Network</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="text-slate-400 bg-slate-900">
-                  <tr>
-                    <th className="p-3">UID</th>
-                    <th className="p-3">Type</th>
-                    <th className="p-3">Tenant</th>
-                    <th className="p-3">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {hardware.map(hw => (
-                    <tr key={hw.id} className="border-b border-slate-700 hover:bg-slate-700/50">
-                      <td className="p-3 font-mono text-xs">{hw.uid}</td>
-                      <td className="p-3">{hw.type}</td>
-                      <td className="p-3 text-blue-300">{hw.company}</td>
-                      <td className="p-3"><span className={`px-2 py-0.5 rounded-full text-xs ${hw.status === 'Online' ? 'bg-emerald-900 text-emerald-300' : 'bg-red-900 text-red-300'}`}>{hw.status}</span></td>
+          <div className="lg:col-span-2 space-y-8">
+            {/* Company List with Delete */}
+            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+              <h2 className="font-bold mb-4 flex items-center gap-2 text-white">🏢 Active Tenants</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="text-slate-400 bg-slate-900">
+                    <tr>
+                      <th className="p-3">Company</th>
+                      <th className="p-3">Plan</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-right">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {companies.map(co => (
+                      <tr key={co.id} className="border-b border-slate-700 hover:bg-slate-700/50">
+                        <td className="p-3 font-bold">{co.name}</td>
+                        <td className="p-3">{co.plan}</td>
+                        <td className="p-3"><span className="px-2 py-0.5 rounded-full bg-emerald-900 text-emerald-300 text-xs">{co.status}</span></td>
+                        <td className="p-3 text-right">
+                          <button onClick={() => handleDelete(co.id)} className="text-red-400 hover:bg-red-900/50 p-2 rounded">
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Hardware List with Edit */}
+            <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
+              <h2 className="font-bold mb-4 flex items-center gap-2 text-blue-400"><Server size={20}/> Hardware Network</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="text-slate-400 bg-slate-900">
+                    <tr>
+                      <th className="p-3">UID</th>
+                      <th className="p-3">Type</th>
+                      <th className="p-3">Tenant</th>
+                      <th className="p-3">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hardware.map(hw => (
+                      <tr key={hw.id} className="border-b border-slate-700 hover:bg-slate-700/50">
+                        <td className="p-3 font-mono text-xs">{hw.uid}</td>
+                        
+                        {/* Inline Edit Logic */}
+                        <td className="p-3">
+                          {editingHw === hw.id ? (
+                            <select 
+                              className="bg-slate-900 border border-slate-600 rounded px-2 py-1 text-xs"
+                              defaultValue={hw.type}
+                              onChange={(e) => handleUpdateHardware(hw.id, e.target.value)}
+                            >
+                              <option value="ESP32">ESP32</option>
+                              <option value="RASPBERRY_PI">RASPBERRY_PI</option>
+                              <option value="ZK_DEVICE">ZK_DEVICE</option>
+                            </select>
+                          ) : (
+                            hw.type
+                          )}
+                        </td>
+                        
+                        <td className="p-3 text-blue-300">{hw.company}</td>
+                        <td className="p-3">
+                          {editingHw === hw.id ? (
+                            <button onClick={() => setEditingHw(null)} className="text-slate-400 text-xs hover:text-white">Cancel</button>
+                          ) : (
+                            <button onClick={() => setEditingHw(hw.id)} className="text-blue-400 hover:text-blue-300 p-1">
+                              <Settings size={14} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

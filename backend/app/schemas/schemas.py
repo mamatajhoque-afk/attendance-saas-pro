@@ -87,3 +87,7 @@ class AttendanceHistory(BaseModel):
     status: str
     check_in: str
     check_out: str
+
+# [For edit hardware type ]
+class HardwareUpdate(BaseModel):
+    device_type: str

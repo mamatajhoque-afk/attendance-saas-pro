@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db.models import Company, CompanyAdmin, HardwareDevice, SuperAdmin
-from app.schemas.schemas import CompanyCreate
+from app.schemas.schemas import CompanyCreate, HardwareUpdate
 from app.core.security import get_password_hash
 
 router = APIRouter()
@@ -93,3 +93,36 @@ def setup_owner(db: Session = Depends(get_db)):
     ))
     db.commit()
     return {"message": "Owner created: owner / owner123"}
+
+# [NEW FEATURE 1: DELETE COMPANY]
+@router.delete("/saas/companies/{company_id}")
+def delete_company(company_id: int, db: Session = Depends(get_db)):
+    # 1. Find Company
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(404, "Company not found")
+    
+    # 2. Soft Delete (Mark as deleted so we don't break history immediately)
+    company.status = "deleted"
+    company.deleted_at = datetime.utcnow()
+    
+    # 3. Disable their hardware
+    devices = db.query(HardwareDevice).filter(HardwareDevice.company_id == company_id).all()
+    for d in devices:
+        d.active = False
+
+    db.commit()
+    return {"status": "success", "message": f"Company '{company.name}' deleted."}
+
+# [NEW FEATURE 2: UPDATE HARDWARE]
+@router.put("/saas/hardware/{device_id}")
+def update_hardware(device_id: int, payload: HardwareUpdate, db: Session = Depends(get_db)):
+    device = db.query(HardwareDevice).filter(HardwareDevice.id == device_id).first()
+    if not device:
+         raise HTTPException(404, "Device not found")
+    
+    # Update the type
+    device.device_type = payload.device_type
+    db.commit()
+    
+    return {"status": "success", "message": "Hardware settings updated"}
