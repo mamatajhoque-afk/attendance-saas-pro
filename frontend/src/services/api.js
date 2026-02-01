@@ -56,17 +56,9 @@ export const superAdminService = {
   createCompany: (data) => api.post('/saas/create_company', data),
   getCompanies: () => api.get('/saas/companies'),
   getHardware: () => api.get('/saas/hardware'),
-
-  // [NEW] Delete Company
   deleteCompany: (id) => api.delete(`/saas/companies/${id}`),
-
-  // [NEW] Update Hardware
   updateHardware: (id, type) => api.put(`/saas/hardware/${id}`, { device_type: type }),
-  
-  // [NEW] Update Company (Name or Status)
   updateCompany: (id, name, status) => api.put(`/saas/companies/${id}`, { name, status }),
-  
-  // 🚨 IoT Remote Open
   emergencyOpen: (companyId, deviceId, reason) => api.post('/admin/door/emergency-open', {
     company_id: companyId,
     device_id: deviceId,
@@ -75,25 +67,20 @@ export const superAdminService = {
 };
 
 export const companyService = {
-  // ✅ FIXED: URL changed from '/company/add_employee' to '/company/employees'
+  // ✅ FIXED: Matches Backend Route "/company/employees"
   addEmployee: (data) => api.post('/company/employees', data),
   
   getEmployees: () => api.get('/company/employees'),
-
-  // [Live tracking & history]
   getEmployeeHistory: (empId) => api.get(`/company/employees/${empId}/attendance`),
   getLiveTracking: () => api.get('/company/tracking/live'),
   
-  // [NEW FEATURES]
   deleteEmployee: (dbId) => api.delete(`/company/employees/${dbId}`),
   updateEmployee: (dbId, data) => api.put(`/company/employees/${dbId}`, data), 
   markAttendance: (data) => api.post('/company/attendance/manual', data),
   
-  // Device Control
   getDevices: () => api.get('/company/devices'),
   emergencyOpen: (deviceId, reason) => api.post('/company/devices/emergency-open', { device_id: deviceId, reason }),
 
-  // ⚙️ Settings (Form Data)
   updateSettings: (lat, lng, radius) => {
     const formData = new FormData();
     formData.append('lat', lat);
@@ -105,14 +92,10 @@ export const companyService = {
 
 export const employeeService = {
   getProfile: () => api.get('/api/me'),
-  
-  // 📍 GPS Punch
   markAttendance: (id, location) => api.post('/api/mark_attendance', {
     employee_id: id,
     location: location
   }),
-  
-  // 🚚 Tracking
   startTracking: (id, dept) => api.post('/api/tracking/start', {
     employee_id: id,
     department: dept
