@@ -126,3 +126,27 @@ def update_hardware(device_id: int, payload: HardwareUpdate, db: Session = Depen
     db.commit()
     
     return {"status": "success", "message": "Hardware settings updated"}
+
+# [NEW FEATURE: EDIT COMPANY (Name & Status)]
+@router.put("/saas/companies/{company_id}")
+def update_company(company_id: int, payload: CompanyUpdate, db: Session = Depends(get_db)):
+    # 1. Find Company
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(404, "Company not found")
+
+    # 2. Update Name (if provided)
+    if payload.name:
+        # Check for duplicates only if name is actually changing
+        if payload.name != company.name and db.query(Company).filter(Company.name == payload.name).first():
+            raise HTTPException(400, "Company Name Taken")
+        company.name = payload.name
+
+    # 3. Update Status (if provided)
+    if payload.status:
+        if payload.status not in ["active", "suspended"]:
+             raise HTTPException(400, "Invalid Status")
+        company.status = payload.status
+
+    db.commit()
+    return {"status": "success", "message": f"Company '{company.name}' updated."}

@@ -91,3 +91,8 @@ class AttendanceHistory(BaseModel):
 # [For edit hardware type ]
 class HardwareUpdate(BaseModel):
     device_type: str
+
+# [Edit and suspend company]
+class CompanyUpdate(BaseModel):
+    name: Optional[str] = None
+    status: Optional[str] = None # 'active', 'suspended'

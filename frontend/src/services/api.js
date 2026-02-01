@@ -63,6 +63,8 @@ export const superAdminService = {
 
   // [NEW] Update Hardware
   updateHardware: (id, type) => api.put(`/saas/hardware/${id}`, { device_type: type }),
+  // [NEW] Update Company (Name or Status)
+  updateCompany: (id, name, status) => api.put(`/saas/companies/${id}`, { name, status }),
   
   // 🚨 IoT Remote Open
   emergencyOpen: (companyId, deviceId, reason) => api.post('/admin/door/emergency-open', {
