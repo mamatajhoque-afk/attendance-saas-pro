@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.db.models import Company, CompanyAdmin, HardwareDevice, SuperAdmin
-from app.schemas.schemas import CompanyCreate, HardwareUpdate
+from app.schemas.schemas import CompanyCreate, HardwareUpdate, CompanyUpdate
 from app.core.security import get_password_hash
 
 router = APIRouter()
