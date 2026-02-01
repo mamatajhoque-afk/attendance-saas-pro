@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import extract
 from datetime import datetime
 
+from app.db.models import LocationLog, Employee, Attendance
 from app.db.database import get_db
 from app.db.models import Employee, Company, Attendance, CompanyAdmin
 from app.core.security import get_password_hash
@@ -133,3 +134,59 @@ def get_history(
         "check_in": rec.check_in_time.strftime("%I:%M %p") if rec.check_in_time else "-",
         "check_out": rec.check_out_time.strftime("%I:%M %p") if rec.check_out_time else "-"
     } for rec in records]
+
+# [NEW FEATURE 1: Get Single Employee History]
+@router.get("/company/employees/{employee_id}/attendance")
+def get_employee_history(
+    employee_id: str, 
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    # Verify employee belongs to this company
+    employee = db.query(Employee).filter(
+        Employee.employee_id == employee_id,
+        Employee.company_id == current_user.company_id
+    ).first()
+    
+    if not employee:
+        raise HTTPException(404, "Employee not found")
+        
+    logs = db.query(Attendance).filter(
+        Attendance.employee_id == employee.id
+    ).order_by(Attendance.timestamp.desc()).limit(50).all()
+    
+    return logs
+
+# [NEW FEATURE 2: Live Tracking for Marketing/Field Staff]
+@router.get("/company/tracking/live")
+def get_live_tracking(
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    # Get all employees who have "Marketing" or "Field" in their role
+    # In a real app, you might query by Department.
+    employees = db.query(Employee).filter(
+        Employee.company_id == current_user.company_id,
+        Employee.role.ilike("%Marketing%") # Checks for "Marketing", "Field Marketing", etc.
+    ).all()
+    
+    live_data = []
+    for emp in employees:
+        # Get their LAST known location
+        last_loc = db.query(LocationLog).filter(
+            LocationLog.employee_id == emp.id
+        ).order_by(LocationLog.timestamp.desc()).first()
+        
+        if last_loc:
+            # Check if data is fresh (e.g., within last 12 hours)
+            live_data.append({
+                "id": emp.employee_id,
+                "name": emp.name,
+                "role": emp.role,
+                "lat": last_loc.latitude,
+                "lon": last_loc.longitude,
+                "last_seen": last_loc.timestamp,
+                "battery": "85%" # Placeholder or add to DB if needed
+            })
+            
+    return live_data

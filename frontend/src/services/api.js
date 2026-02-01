@@ -78,6 +78,10 @@ export const companyService = {
   // 🏢 Add Employee (JSON)
   addEmployee: (data) => api.post('/company/add_employee', data),
   getEmployees: () => api.get('/company/employees'),
+
+  // [Live tracking & history]
+  getEmployeeHistory: (empId) => api.get(`/company/employees/${empId}/attendance`),
+  getLiveTracking: () => api.get('/company/tracking/live'),
   
   // ⚙️ Settings (Form Data)
   updateSettings: (lat, lng, radius) => {
