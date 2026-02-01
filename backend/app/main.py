@@ -16,7 +16,7 @@ Base.metadata.create_all(bind=engine)
 
 # 3. INIT APP
 app = FastAPI(
-    title=settings.PROJECT_NAME,
+    title=settings.APP_NAME,
     version="2.0.0 (Pro)",
     description="Enterprise Attendance SaaS API"
 )
