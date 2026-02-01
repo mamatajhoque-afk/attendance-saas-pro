@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Form
 from sqlalchemy.orm import Session
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer # <--- Added Import
 from datetime import datetime
 
 from app.db.database import get_db
@@ -9,6 +9,10 @@ from app.core.security import verify_password, create_access_token, get_password
 from app.schemas.schemas import LoginRequest, Token
 
 router = APIRouter()
+
+# ⚠️ THIS WAS MISSING
+# This allows other files to import "oauth2_scheme" to verify tokens
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="saas/login") 
 
 # 1. SUPER ADMIN LOGIN (OAuth2 Standard for Swagger UI)
 @router.post("/saas/login", response_model=Token)
