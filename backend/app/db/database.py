@@ -8,7 +8,7 @@ SQLALCHEMY_DATABASE_URL = settings.get_database_url()
 
 # 2. Configure Engine
 # SQLite needs a specific flag, Postgres does not.
-connect_args = {"check_same_thread": False} if "sqlite" in SQLAlchemy_DATABASE_URL else {}
+connect_args = {"check_same_thread": False} if "sqlite" in SQLALCHEMY_DATABASE_URL else {}
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL, 
