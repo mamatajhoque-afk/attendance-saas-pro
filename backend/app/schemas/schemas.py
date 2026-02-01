@@ -96,3 +96,21 @@ class HardwareUpdate(BaseModel):
 class CompanyUpdate(BaseModel):
     name: Optional[str] = None
     status: Optional[str] = None # 'active', 'suspended'
+
+# [NEW] For Suspending/Updating Employees
+class EmployeeUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None # 'active' or 'suspended'
+
+# [NEW] For Manual Attendance
+class ManualAttendance(BaseModel):
+    employee_id: str
+    timestamp: datetime
+    type: str # 'check_in' or 'check_out'
+    notes: Optional[str] = "Manual Entry"
+
+# [NEW] For Emergency Door Open
+class EmergencyOpen(BaseModel):
+    device_id: int
+    reason: str

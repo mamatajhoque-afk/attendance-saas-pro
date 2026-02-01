@@ -4,45 +4,38 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { 
   Building2, Users, MapPin, History, LogOut, 
-  Search, UserPlus, Clock, Navigation 
+  Trash2, Power, UserCheck, ShieldAlert, Fingerprint, Lock
 } from 'lucide-react';
 
 const CompanyDashboard = () => {
-  const [activeTab, setActiveTab] = useState('staff'); // 'staff' or 'tracking'
+  const [activeTab, setActiveTab] = useState('staff'); 
   const [employees, setEmployees] = useState([]);
+  const [devices, setDevices] = useState([]); // For door control
   const [trackingData, setTrackingData] = useState([]);
   
-  // Modal State
-  const [selectedEmp, setSelectedEmp] = useState(null); // Employee Object
-  const [historyLogs, setHistoryLogs] = useState([]);
-  const [showModal, setShowModal] = useState(false);
-
+  // Forms & Modals
   const [newEmp, setNewEmp] = useState({ employee_id: '', name: '', password: '', role: 'Staff' });
+  const [manualAtt, setManualAtt] = useState({ employee_id: '', type: 'check_in', date: '', time: '' });
+  
   const navigate = useNavigate();
 
   useEffect(() => {
     loadEmployees();
-    // Poll tracking data every 30 seconds if on tracking tab
-    let interval;
-    if (activeTab === 'tracking') {
-      loadTracking();
-      interval = setInterval(loadTracking, 30000);
-    }
-    return () => clearInterval(interval);
-  }, [activeTab]);
+    loadDevices(); // Load devices on start
+  }, []);
 
   const loadEmployees = async () => {
     try {
       const res = await companyService.getEmployees();
-      setEmployees(res.data);
+      setEmployees(res.data.filter(e => !e.deleted_at)); // Hide deleted
     } catch (err) { toast.error("Failed to load staff"); }
   };
-
-  const loadTracking = async () => {
+  
+  const loadDevices = async () => {
     try {
-      const res = await companyService.getLiveTracking();
-      setTrackingData(res.data);
-    } catch (err) { console.error("Tracking load failed"); }
+      const res = await companyService.getDevices();
+      setDevices(res.data);
+    } catch (err) { console.error("No devices found"); }
   };
 
   const handleAddEmployee = async (e) => {
@@ -51,23 +44,57 @@ const CompanyDashboard = () => {
       await companyService.addEmployee(newEmp);
       toast.success("Employee Added");
       loadEmployees();
+      setNewEmp({ employee_id: '', name: '', password: '', role: 'Staff' });
     } catch (err) { toast.error("Failed to add"); }
   };
 
-  // [NEW] View History Function
-  const handleViewHistory = async (emp) => {
+  // [NEW] Delete Employee
+  const handleDelete = async (id) => {
+    if(!window.confirm("Remove this employee?")) return;
     try {
-      setSelectedEmp(emp);
-      const res = await companyService.getEmployeeHistory(emp.employee_id);
-      setHistoryLogs(res.data);
-      setShowModal(true);
-    } catch (err) { toast.error("Could not fetch history"); }
+      await companyService.deleteEmployee(id);
+      toast.success("Employee Removed");
+      loadEmployees();
+    } catch (err) { toast.error("Delete failed"); }
+  };
+
+  // [NEW] Suspend/Activate
+  const handleToggleStatus = async (emp) => {
+    const newStatus = emp.status === 'suspended' ? 'active' : 'suspended';
+    try {
+      await companyService.updateEmployee(emp.id, { status: newStatus });
+      toast.success(`User ${newStatus}`);
+      loadEmployees();
+    } catch (err) { toast.error("Status update failed"); }
+  };
+
+  // [NEW] Manual Attendance
+  const handleManualAttendance = async (e) => {
+    e.preventDefault();
+    try {
+      // Combine date and time
+      const timestamp = new Date(`${manualAtt.date}T${manualAtt.time}`).toISOString();
+      await companyService.markAttendance({
+        employee_id: manualAtt.employee_id,
+        type: manualAtt.type,
+        timestamp: timestamp
+      });
+      toast.success("Attendance Marked!");
+    } catch (err) { toast.error("Failed to mark attendance"); }
+  };
+
+  // [NEW] Emergency Door Open
+  const handleEmergencyOpen = async (deviceId) => {
+    if(!window.confirm("⚠️ EMERGENCY: Open this door remotely?")) return;
+    try {
+      await companyService.emergencyOpen(deviceId, "Admin Remote Open");
+      toast.success("Door Unlock Command Sent 🔓");
+    } catch (err) { toast.error("Command Failed"); }
   };
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <header className="flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
           <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
             <Building2 className="text-blue-600"/> Company Portal
@@ -77,175 +104,136 @@ const CompanyDashboard = () => {
           </button>
         </header>
 
-        {/* Navigation Tabs */}
         <div className="flex gap-4 mb-6">
-          <button 
-            onClick={() => setActiveTab('staff')}
-            className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'staff' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'}`}
-          >
-            <Users size={18}/> Staff Management
+          <button onClick={() => setActiveTab('staff')} className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'staff' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'}`}>
+            <Users size={18}/> Staff
           </button>
-          <button 
-            onClick={() => setActiveTab('tracking')}
-            className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'tracking' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600'}`}
-          >
-            <Navigation size={18}/> Live Tracking
+          <button onClick={() => setActiveTab('control')} className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'control' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600'}`}>
+            <ShieldAlert size={18}/> Control Center
           </button>
         </div>
 
         {/* === TAB 1: STAFF MANAGEMENT === */}
         {activeTab === 'staff' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Add Employee */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
-              <h2 className="font-bold mb-4 flex items-center gap-2 text-slate-700"><UserPlus size={20}/> Register Staff</h2>
+              <h2 className="font-bold mb-4 text-slate-700">Add New Staff</h2>
               <form onSubmit={handleAddEmployee} className="space-y-4">
-                <input placeholder="Employee ID (e.g. EMP001)" className="w-full border p-2 rounded" 
-                  onChange={e => setNewEmp({...newEmp, employee_id: e.target.value})} />
-                <input placeholder="Full Name" className="w-full border p-2 rounded" 
-                  onChange={e => setNewEmp({...newEmp, name: e.target.value})} />
-                <input placeholder="Password" type="password" className="w-full border p-2 rounded" 
-                  onChange={e => setNewEmp({...newEmp, password: e.target.value})} />
-                <select className="w-full border p-2 rounded"
-                  onChange={e => setNewEmp({...newEmp, role: e.target.value})}>
+                <input placeholder="ID (e.g. EMP01)" className="w-full border p-2 rounded" value={newEmp.employee_id} onChange={e => setNewEmp({...newEmp, employee_id: e.target.value})} />
+                <input placeholder="Name" className="w-full border p-2 rounded" value={newEmp.name} onChange={e => setNewEmp({...newEmp, name: e.target.value})} />
+                <input placeholder="Password" type="password" className="w-full border p-2 rounded" value={newEmp.password} onChange={e => setNewEmp({...newEmp, password: e.target.value})} />
+                <select className="w-full border p-2 rounded" value={newEmp.role} onChange={e => setNewEmp({...newEmp, role: e.target.value})}>
                   <option value="Staff">Office Staff</option>
                   <option value="Marketing">Field Marketing</option>
-                  <option value="Manager">Manager</option>
                 </select>
-                <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded">Add Employee</button>
+                <button className="w-full bg-blue-600 text-white font-bold py-2 rounded">Register</button>
               </form>
             </div>
 
-            {/* Employee List */}
             <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-              <h2 className="font-bold mb-4 text-slate-700">Employee Directory</h2>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50 text-slate-500">
-                    <tr>
-                      <th className="p-3">ID</th>
-                      <th className="p-3">Name</th>
-                      <th className="p-3">Role</th>
-                      <th className="p-3">Action</th>
+              <h2 className="font-bold mb-4 text-slate-700">Staff List</h2>
+              <table className="w-full text-left text-sm">
+                <thead className="bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="p-3">ID</th>
+                    <th className="p-3">Name</th>
+                    <th className="p-3">Status</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {employees.map(emp => (
+                    <tr key={emp.id} className="border-b hover:bg-slate-50">
+                      <td className="p-3 font-mono">{emp.employee_id}</td>
+                      <td className="p-3">{emp.name}</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-xs ${emp.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                          {emp.status || 'active'}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right flex justify-end gap-2">
+                        {/* Suspend Button */}
+                        <button onClick={() => handleToggleStatus(emp)} 
+                          title={emp.status === 'suspended' ? "Activate" : "Suspend"}
+                          className={`p-2 rounded ${emp.status === 'suspended' ? 'text-green-600 bg-green-50' : 'text-amber-600 bg-amber-50'}`}>
+                          {emp.status === 'suspended' ? <UserCheck size={16}/> : <Power size={16}/>}
+                        </button>
+                        {/* Delete Button */}
+                        <button onClick={() => handleDelete(emp.id)} className="p-2 rounded text-red-600 bg-red-50 hover:bg-red-100">
+                          <Trash2 size={16}/>
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {employees.map(emp => (
-                      <tr key={emp.id} className="border-b hover:bg-slate-50">
-                        <td className="p-3 font-mono text-sm">{emp.employee_id}</td>
-                        <td className="p-3 font-medium">{emp.name}</td>
-                        <td className="p-3"><span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">{emp.role}</span></td>
-                        <td className="p-3">
-                          <button 
-                            onClick={() => handleViewHistory(emp)}
-                            className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
-                          >
-                            <History size={14}/> History
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}
 
-        {/* === TAB 2: LIVE TRACKING === */}
-        {activeTab === 'tracking' && (
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h2 className="font-bold mb-6 text-indigo-700 flex items-center gap-2">
-              <span className="relative flex h-3 w-3">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-3 w-3 bg-indigo-500"></span>
-              </span>
-              Live Marketing Team Status
-            </h2>
+        {/* === TAB 2: CONTROL CENTER (Attendance & Doors) === */}
+        {activeTab === 'control' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             
-            {trackingData.length === 0 ? (
-              <p className="text-slate-400 text-center py-10">No active marketing staff found nearby.</p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {trackingData.map((data, idx) => (
-                  <div key={idx} className="border border-indigo-100 bg-indigo-50/30 p-4 rounded-xl flex flex-col gap-3">
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <h3 className="font-bold text-slate-800">{data.name}</h3>
-                        <span className="text-xs text-indigo-600 font-mono">{data.id}</span>
-                      </div>
-                      <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full flex items-center gap-1">
-                        Active
-                      </span>
+            {/* 1. Manual Attendance Form */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+              <h2 className="font-bold mb-4 flex items-center gap-2 text-blue-700"><Fingerprint/> Manual Attendance Entry</h2>
+              <form onSubmit={handleManualAttendance} className="space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-500">Employee ID</label>
+                  <input className="w-full border p-2 rounded mt-1" placeholder="e.g. EMP001" 
+                    onChange={e => setManualAtt({...manualAtt, employee_id: e.target.value})} required />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-xs font-bold text-slate-500">Date</label>
+                    <input type="date" className="w-full border p-2 rounded mt-1" 
+                      onChange={e => setManualAtt({...manualAtt, date: e.target.value})} required />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-slate-500">Time</label>
+                    <input type="time" className="w-full border p-2 rounded mt-1" 
+                      onChange={e => setManualAtt({...manualAtt, time: e.target.value})} required />
+                  </div>
+                </div>
+                <div className="flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input type="radio" name="type" value="check_in" defaultChecked 
+                      onChange={() => setManualAtt({...manualAtt, type: 'check_in'})} /> Check In
+                  </label>
+                  <label className="flex items-center gap-2">
+                    <input type="radio" name="type" value="check_out" 
+                      onChange={() => setManualAtt({...manualAtt, type: 'check_out'})} /> Check Out
+                  </label>
+                </div>
+                <button className="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">Submit Attendance</button>
+              </form>
+            </div>
+
+            {/* 2. Emergency Door Control */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-red-100">
+              <h2 className="font-bold mb-4 flex items-center gap-2 text-red-600"><Lock/> Emergency Door Control</h2>
+              <p className="text-sm text-slate-500 mb-6">Select a device below to trigger an immediate emergency unlock.</p>
+              
+              <div className="space-y-3">
+                {devices.length === 0 ? <p className="text-slate-400 italic">No devices connected.</p> : devices.map(dev => (
+                  <div key={dev.id} className="border border-slate-200 p-4 rounded-lg flex justify-between items-center">
+                    <div>
+                      <h4 className="font-bold text-slate-700">{dev.device_type}</h4>
+                      <p className="text-xs text-slate-500 font-mono">UID: {dev.device_uid}</p>
+                      <p className="text-xs text-blue-500">{dev.location || "Main Entrance"}</p>
                     </div>
-                    
-                    <div className="bg-white p-3 rounded border border-slate-200 text-sm space-y-1">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Lat:</span>
-                        <span className="font-mono">{data.lat.toFixed(5)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500">Lon:</span>
-                        <span className="font-mono">{data.lon.toFixed(5)}</span>
-                      </div>
-                      <div className="flex justify-between text-xs text-slate-400 mt-2 pt-2 border-t">
-                        <span>Last Seen:</span>
-                        <span>{new Date(data.last_seen).toLocaleTimeString()}</span>
-                      </div>
-                    </div>
-                    
                     <button 
-                      onClick={() => window.open(`https://www.google.com/maps?q=${data.lat},${data.lon}`, '_blank')}
-                      className="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded text-sm flex justify-center items-center gap-2"
+                      onClick={() => handleEmergencyOpen(dev.id)}
+                      className="bg-red-100 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2 rounded font-bold text-sm transition-colors border border-red-200"
                     >
-                      <MapPin size={16}/> View on Map
+                      OPEN DOOR
                     </button>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        )}
-
-        {/* === MODAL: ATTENDANCE HISTORY === */}
-        {showModal && selectedEmp && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-xl w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
-              <div className="p-6 border-b flex justify-between items-center bg-slate-50">
-                <h3 className="font-bold text-lg">Attendance History: {selectedEmp.name}</h3>
-                <button onClick={() => setShowModal(false)} className="text-slate-400 hover:text-red-500">Close</button>
-              </div>
-              
-              <div className="p-6 overflow-y-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-100">
-                    <tr>
-                      <th className="p-2 text-left">Date</th>
-                      <th className="p-2 text-left">Time</th>
-                      <th className="p-2 text-left">Type</th>
-                      <th className="p-2 text-left">Method</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyLogs.map(log => (
-                      <tr key={log.id} className="border-b">
-                        <td className="p-2">{new Date(log.timestamp).toLocaleDateString()}</td>
-                        <td className="p-2 font-mono">{new Date(log.timestamp).toLocaleTimeString()}</td>
-                        <td className="p-2">
-                          <span className={`px-2 py-0.5 rounded-full text-xs ${log.type === 'check_in' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {log.type.replace('_', ' ').toUpperCase()}
-                          </span>
-                        </td>
-                        <td className="p-2 text-slate-500">{log.method}</td>
-                      </tr>
-                    ))}
-                    {historyLogs.length === 0 && (
-                      <tr><td colSpan="4" className="p-4 text-center text-slate-400">No records found.</td></tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
             </div>
+
           </div>
         )}
 

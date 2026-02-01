@@ -83,6 +83,15 @@ export const companyService = {
   getEmployeeHistory: (empId) => api.get(`/company/employees/${empId}/attendance`),
   getLiveTracking: () => api.get('/company/tracking/live'),
   
+// [NEW FEATURES]
+  deleteEmployee: (dbId) => api.delete(`/company/employees/${dbId}`),
+  updateEmployee: (dbId, data) => api.put(`/company/employees/${dbId}`, data), // data = { status: 'suspended' }
+  markAttendance: (data) => api.post('/company/attendance/manual', data),
+  
+  // Device Control
+  getDevices: () => api.get('/company/devices'),
+  emergencyOpen: (deviceId, reason) => api.post('/company/devices/emergency-open', { device_id: deviceId, reason }),
+
   // ⚙️ Settings (Form Data)
   updateSettings: (lat, lng, radius) => {
     const formData = new FormData();

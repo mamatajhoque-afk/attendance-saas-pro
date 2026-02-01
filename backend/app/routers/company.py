@@ -8,7 +8,9 @@ from app.db.database import get_db
 from app.db.models import Employee, Company, Attendance, CompanyAdmin
 from app.core.security import get_password_hash
 from app.schemas.schemas import EmployeeCreate, OfficeSettings, ManualAttendance, EmployeeResponse
-from app.routers.auth import oauth2_scheme  # We need to verify tokens
+from app.schemas.schemas import EmployeeUpdate, ManualAttendance, EmergencyOpen
+from app.db.models import HardwareDevice, DoorEvent 
+from app.routers.auth import oauth2_scheme  # fro We need to verify tokens
 from jose import jwt
 from app.core.config import settings
 
@@ -190,3 +192,106 @@ def get_live_tracking(
             })
             
     return live_data
+
+# [NEW 1: UPDATE EMPLOYEE (Suspend/Activate)]
+@router.put("/company/employees/{emp_db_id}")
+def update_employee(
+    emp_db_id: int, 
+    payload: EmployeeUpdate,
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    emp = db.query(Employee).filter(
+        Employee.id == emp_db_id,
+        Employee.company_id == current_user.company_id
+    ).first()
+    
+    if not emp: raise HTTPException(404, "Employee not found")
+
+    if payload.status: emp.status = payload.status
+    if payload.role: emp.role = payload.role
+    if payload.name: emp.name = payload.name
+    
+    db.commit()
+    return {"status": "success", "message": "Employee updated"}
+
+# [NEW 2: DELETE EMPLOYEE (Soft Delete)]
+@router.delete("/company/employees/{emp_db_id}")
+def delete_employee(
+    emp_db_id: int,
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    emp = db.query(Employee).filter(
+        Employee.id == emp_db_id, 
+        Employee.company_id == current_user.company_id
+    ).first()
+    
+    if not emp: raise HTTPException(404, "Employee not found")
+    
+    emp.deleted_at = datetime.utcnow() # Soft delete
+    db.commit()
+    return {"status": "success", "message": "Employee deleted"}
+
+# [NEW 3: MANUAL ATTENDANCE]
+@router.post("/company/attendance/manual")
+def mark_manual_attendance(
+    payload: ManualAttendance,
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    # Find employee by string ID (e.g., "EMP001")
+    emp = db.query(Employee).filter(
+        Employee.employee_id == payload.employee_id,
+        Employee.company_id == current_user.company_id
+    ).first()
+    
+    if not emp: raise HTTPException(404, "Employee not found")
+    
+    new_log = Attendance(
+        employee_id=emp.id,
+        timestamp=payload.timestamp,
+        type=payload.type,
+        method="MANUAL_ADMIN",
+        image_url=payload.notes # Using image_url field for notes to save space, or add 'notes' column to DB
+    )
+    db.add(new_log)
+    db.commit()
+    return {"status": "success", "message": "Attendance marked"}
+
+# [NEW 4: EMERGENCY DOOR OPEN]
+@router.post("/company/devices/emergency-open")
+def emergency_open(
+    payload: EmergencyOpen,
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    # Verify device belongs to this company
+    device = db.query(HardwareDevice).filter(
+        HardwareDevice.id == payload.device_id,
+        HardwareDevice.company_id == current_user.company_id
+    ).first()
+    
+    if not device: raise HTTPException(404, "Device not found")
+    
+    # Log the event
+    db.add(DoorEvent(
+        device_id=device.id,
+        event_type="EMERGENCY_OPEN",
+        description=f"Opened by Admin: {payload.reason}",
+        timestamp=datetime.utcnow()
+    ))
+    db.commit()
+    
+    # In a real IoT system, you would publish MQTT message here
+    return {"status": "success", "message": "Door Unlock Command Sent"}
+    
+# [HELPER: LIST DEVICES FOR COMPANY]
+@router.get("/company/devices")
+def get_company_devices(
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    return db.query(HardwareDevice).filter(
+        HardwareDevice.company_id == current_user.company_id
+    ).all()
