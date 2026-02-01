@@ -6,10 +6,7 @@ from app.db.database import get_db
 from app.db.models import Employee, Attendance, HardwareDevice, DoorEvent, LocationLog, Company
 from app.core.security import get_password_hash
 from app.routers.auth import get_current_active_admin
-from app.schemas.schemas import (
-    EmployeeCreate, EmployeeUpdate, ManualAttendance, 
-    EmergencyOpen, TokenData, EmployeeResponse
-)
+from app.schemas.schemas import (EmployeeCreate, EmployeeUpdate, ManualAttendance, EmergencyOpen, TokenData, EmployeeResponse)
 
 router = APIRouter()
 
