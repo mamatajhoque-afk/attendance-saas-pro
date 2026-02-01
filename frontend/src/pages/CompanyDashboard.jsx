@@ -4,30 +4,33 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { 
   Building2, Users, MapPin, History, LogOut, 
-  Trash2, Power, UserCheck, ShieldAlert, Fingerprint, Lock
+  Trash2, Power, UserCheck, ShieldAlert, Fingerprint, Lock, Settings
 } from 'lucide-react';
 
 const CompanyDashboard = () => {
   const [activeTab, setActiveTab] = useState('staff'); 
   const [employees, setEmployees] = useState([]);
-  const [devices, setDevices] = useState([]); // For door control
+  const [devices, setDevices] = useState([]); 
   const [trackingData, setTrackingData] = useState([]);
   
   // Forms & Modals
   const [newEmp, setNewEmp] = useState({ employee_id: '', name: '', password: '', role: 'Staff' });
   const [manualAtt, setManualAtt] = useState({ employee_id: '', type: 'check_in', date: '', time: '' });
   
+  // [NEW] Settings State
+  const [settings, setSettings] = useState({ lat: '', lng: '', radius: '50' });
+
   const navigate = useNavigate();
 
   useEffect(() => {
     loadEmployees();
-    loadDevices(); // Load devices on start
+    loadDevices(); 
   }, []);
 
   const loadEmployees = async () => {
     try {
       const res = await companyService.getEmployees();
-      setEmployees(res.data.filter(e => !e.deleted_at)); // Hide deleted
+      setEmployees(res.data.filter(e => !e.deleted_at)); 
     } catch (err) { toast.error("Failed to load staff"); }
   };
   
@@ -48,7 +51,6 @@ const CompanyDashboard = () => {
     } catch (err) { toast.error("Failed to add"); }
   };
 
-  // [NEW] Delete Employee
   const handleDelete = async (id) => {
     if(!window.confirm("Remove this employee?")) return;
     try {
@@ -58,7 +60,6 @@ const CompanyDashboard = () => {
     } catch (err) { toast.error("Delete failed"); }
   };
 
-  // [NEW] Suspend/Activate
   const handleToggleStatus = async (emp) => {
     const newStatus = emp.status === 'suspended' ? 'active' : 'suspended';
     try {
@@ -68,11 +69,9 @@ const CompanyDashboard = () => {
     } catch (err) { toast.error("Status update failed"); }
   };
 
-  // [NEW] Manual Attendance
   const handleManualAttendance = async (e) => {
     e.preventDefault();
     try {
-      // Combine date and time
       const timestamp = new Date(`${manualAtt.date}T${manualAtt.time}`).toISOString();
       await companyService.markAttendance({
         employee_id: manualAtt.employee_id,
@@ -83,13 +82,37 @@ const CompanyDashboard = () => {
     } catch (err) { toast.error("Failed to mark attendance"); }
   };
 
-  // [NEW] Emergency Door Open
   const handleEmergencyOpen = async (deviceId) => {
     if(!window.confirm("⚠️ EMERGENCY: Open this door remotely?")) return;
     try {
       await companyService.emergencyOpen(deviceId, "Admin Remote Open");
       toast.success("Door Unlock Command Sent 🔓");
     } catch (err) { toast.error("Command Failed"); }
+  };
+
+  // [NEW] Save Settings
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    try {
+      await companyService.updateSettings(settings.lat, settings.lng, settings.radius);
+      toast.success("Office Location Updated 📍");
+    } catch (err) { toast.error("Failed to save settings"); }
+  };
+
+  // [NEW] Get Current Location helper
+  const getCurrentLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(position => {
+        setSettings({
+          ...settings,
+          lat: position.coords.latitude.toString(),
+          lng: position.coords.longitude.toString()
+        });
+        toast.success("Got your location!");
+      });
+    } else {
+      toast.error("Geolocation not supported");
+    }
   };
 
   return (
@@ -104,12 +127,15 @@ const CompanyDashboard = () => {
           </button>
         </header>
 
-        <div className="flex gap-4 mb-6">
-          <button onClick={() => setActiveTab('staff')} className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'staff' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'}`}>
+        <div className="flex gap-4 mb-6 overflow-x-auto pb-2">
+          <button onClick={() => setActiveTab('staff')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'staff' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'}`}>
             <Users size={18}/> Staff
           </button>
-          <button onClick={() => setActiveTab('control')} className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'control' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600'}`}>
+          <button onClick={() => setActiveTab('control')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'control' ? 'bg-amber-600 text-white' : 'bg-white text-slate-600'}`}>
             <ShieldAlert size={18}/> Control Center
+          </button>
+          <button onClick={() => setActiveTab('settings')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'settings' ? 'bg-slate-700 text-white' : 'bg-white text-slate-600'}`}>
+            <Settings size={18}/> Office Settings
           </button>
         </div>
 
@@ -152,13 +178,11 @@ const CompanyDashboard = () => {
                         </span>
                       </td>
                       <td className="p-3 text-right flex justify-end gap-2">
-                        {/* Suspend Button */}
                         <button onClick={() => handleToggleStatus(emp)} 
                           title={emp.status === 'suspended' ? "Activate" : "Suspend"}
                           className={`p-2 rounded ${emp.status === 'suspended' ? 'text-green-600 bg-green-50' : 'text-amber-600 bg-amber-50'}`}>
                           {emp.status === 'suspended' ? <UserCheck size={16}/> : <Power size={16}/>}
                         </button>
-                        {/* Delete Button */}
                         <button onClick={() => handleDelete(emp.id)} className="p-2 rounded text-red-600 bg-red-50 hover:bg-red-100">
                           <Trash2 size={16}/>
                         </button>
@@ -171,69 +195,84 @@ const CompanyDashboard = () => {
           </div>
         )}
 
-        {/* === TAB 2: CONTROL CENTER (Attendance & Doors) === */}
+        {/* === TAB 2: CONTROL CENTER === */}
         {activeTab === 'control' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            
-            {/* 1. Manual Attendance Form */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-              <h2 className="font-bold mb-4 flex items-center gap-2 text-blue-700"><Fingerprint/> Manual Attendance Entry</h2>
+              <h2 className="font-bold mb-4 flex items-center gap-2 text-blue-700"><Fingerprint/> Manual Attendance</h2>
               <form onSubmit={handleManualAttendance} className="space-y-4">
-                <div>
-                  <label className="text-xs font-bold text-slate-500">Employee ID</label>
-                  <input className="w-full border p-2 rounded mt-1" placeholder="e.g. EMP001" 
-                    onChange={e => setManualAtt({...manualAtt, employee_id: e.target.value})} required />
-                </div>
+                <input className="w-full border p-2 rounded mt-1" placeholder="Employee ID (e.g. EMP01)" 
+                  onChange={e => setManualAtt({...manualAtt, employee_id: e.target.value})} required />
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-xs font-bold text-slate-500">Date</label>
-                    <input type="date" className="w-full border p-2 rounded mt-1" 
-                      onChange={e => setManualAtt({...manualAtt, date: e.target.value})} required />
-                  </div>
-                  <div>
-                    <label className="text-xs font-bold text-slate-500">Time</label>
-                    <input type="time" className="w-full border p-2 rounded mt-1" 
-                      onChange={e => setManualAtt({...manualAtt, time: e.target.value})} required />
-                  </div>
+                  <input type="date" className="w-full border p-2 rounded mt-1" 
+                    onChange={e => setManualAtt({...manualAtt, date: e.target.value})} required />
+                  <input type="time" className="w-full border p-2 rounded mt-1" 
+                    onChange={e => setManualAtt({...manualAtt, time: e.target.value})} required />
                 </div>
                 <div className="flex gap-4">
                   <label className="flex items-center gap-2">
-                    <input type="radio" name="type" value="check_in" defaultChecked 
-                      onChange={() => setManualAtt({...manualAtt, type: 'check_in'})} /> Check In
+                    <input type="radio" name="type" value="check_in" defaultChecked onChange={() => setManualAtt({...manualAtt, type: 'check_in'})} /> Check In
                   </label>
                   <label className="flex items-center gap-2">
-                    <input type="radio" name="type" value="check_out" 
-                      onChange={() => setManualAtt({...manualAtt, type: 'check_out'})} /> Check Out
+                    <input type="radio" name="type" value="check_out" onChange={() => setManualAtt({...manualAtt, type: 'check_out'})} /> Check Out
                   </label>
                 </div>
-                <button className="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">Submit Attendance</button>
+                <button className="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">Submit</button>
               </form>
             </div>
 
-            {/* 2. Emergency Door Control */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-red-100">
               <h2 className="font-bold mb-4 flex items-center gap-2 text-red-600"><Lock/> Emergency Door Control</h2>
-              <p className="text-sm text-slate-500 mb-6">Select a device below to trigger an immediate emergency unlock.</p>
-              
               <div className="space-y-3">
-                {devices.length === 0 ? <p className="text-slate-400 italic">No devices connected.</p> : devices.map(dev => (
+                {devices.length === 0 ? <p className="text-slate-400 italic">No devices found.</p> : devices.map(dev => (
                   <div key={dev.id} className="border border-slate-200 p-4 rounded-lg flex justify-between items-center">
                     <div>
                       <h4 className="font-bold text-slate-700">{dev.device_type}</h4>
                       <p className="text-xs text-slate-500 font-mono">UID: {dev.device_uid}</p>
-                      <p className="text-xs text-blue-500">{dev.location || "Main Entrance"}</p>
                     </div>
-                    <button 
-                      onClick={() => handleEmergencyOpen(dev.id)}
-                      className="bg-red-100 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2 rounded font-bold text-sm transition-colors border border-red-200"
-                    >
-                      OPEN DOOR
-                    </button>
+                    <button onClick={() => handleEmergencyOpen(dev.id)} className="bg-red-100 text-red-600 hover:bg-red-600 hover:text-white px-4 py-2 rounded font-bold text-sm border border-red-200">OPEN DOOR</button>
                   </div>
                 ))}
               </div>
             </div>
+          </div>
+        )}
 
+        {/* === TAB 3: OFFICE SETTINGS (NEW) === */}
+        {activeTab === 'settings' && (
+          <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+            <h2 className="font-bold text-xl mb-6 flex items-center gap-2 text-slate-800"><MapPin className="text-emerald-500"/> Office Geofence Settings</h2>
+            <p className="text-slate-500 mb-6 text-sm">Set your office coordinates. Employees can only mark attendance via App if they are within this radius.</p>
+            
+            <form onSubmit={handleSaveSettings} className="space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Latitude</label>
+                  <input className="w-full border border-slate-300 p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
+                    value={settings.lat} onChange={e => setSettings({...settings, lat: e.target.value})} placeholder="e.g. 23.8103" required />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Longitude</label>
+                  <input className="w-full border border-slate-300 p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
+                    value={settings.lng} onChange={e => setSettings({...settings, lng: e.target.value})} placeholder="e.g. 90.4125" required />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1">Radius (Meters)</label>
+                <input type="number" className="w-full border border-slate-300 p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
+                  value={settings.radius} onChange={e => setSettings({...settings, radius: e.target.value})} placeholder="e.g. 50" required />
+              </div>
+
+              <div className="flex gap-4 pt-4">
+                <button type="button" onClick={getCurrentLocation} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded flex justify-center items-center gap-2 transition-colors">
+                  <MapPin size={18}/> Use Current Location
+                </button>
+                <button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded flex justify-center items-center gap-2 transition-colors">
+                  Save Settings
+                </button>
+              </div>
+            </form>
           </div>
         )}
 
