@@ -57,12 +57,12 @@ export const superAdminService = {
   getCompanies: () => api.get('/saas/companies'),
   getHardware: () => api.get('/saas/hardware'),
 
-
   // [NEW] Delete Company
   deleteCompany: (id) => api.delete(`/saas/companies/${id}`),
 
   // [NEW] Update Hardware
   updateHardware: (id, type) => api.put(`/saas/hardware/${id}`, { device_type: type }),
+  
   // [NEW] Update Company (Name or Status)
   updateCompany: (id, name, status) => api.put(`/saas/companies/${id}`, { name, status }),
   
@@ -75,17 +75,18 @@ export const superAdminService = {
 };
 
 export const companyService = {
-  // 🏢 Add Employee (JSON)
-  addEmployee: (data) => api.post('/company/add_employee', data),
+  // ✅ FIXED: URL changed from '/company/add_employee' to '/company/employees'
+  addEmployee: (data) => api.post('/company/employees', data),
+  
   getEmployees: () => api.get('/company/employees'),
 
   // [Live tracking & history]
   getEmployeeHistory: (empId) => api.get(`/company/employees/${empId}/attendance`),
   getLiveTracking: () => api.get('/company/tracking/live'),
   
-// [NEW FEATURES]
+  // [NEW FEATURES]
   deleteEmployee: (dbId) => api.delete(`/company/employees/${dbId}`),
-  updateEmployee: (dbId, data) => api.put(`/company/employees/${dbId}`, data), // data = { status: 'suspended' }
+  updateEmployee: (dbId, data) => api.put(`/company/employees/${dbId}`, data), 
   markAttendance: (data) => api.post('/company/attendance/manual', data),
   
   // Device Control
@@ -99,10 +100,7 @@ export const companyService = {
     formData.append('lng', lng);
     formData.append('radius', radius);
     return api.post('/company/settings/location', formData);
-  },
-
-  getHistory: (empId, month, year) => 
-    api.get(`/company/attendance-history/${empId}?month=${month}&year=${year}`),
+  }
 };
 
 export const employeeService = {
