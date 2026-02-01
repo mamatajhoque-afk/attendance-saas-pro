@@ -2,7 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Bool
 from sqlalchemy.types import JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
-from app.db.database import Base  # Importing Base from the file we made previously
+from app.db.database import Base 
 
 # --- 1. ADMIN & TENANCY MODELS ---
 
@@ -19,14 +19,13 @@ class Company(Base):
     plan = Column(String, default="basic")      
     status = Column(String, default="active")   
     valid_until = Column(Date)
-    deleted_at = Column(DateTime, nullable=True) # Soft Delete logic
+    deleted_at = Column(DateTime, nullable=True)
 
     # Geofencing Settings
     office_lat = Column(String, default="23.8103")
     office_lng = Column(String, default="90.4125")
     office_radius = Column(String, default="50")
     
-    # Relationships
     admins = relationship("CompanyAdmin", back_populates="company")
     employees = relationship("Employee", back_populates="company")
     sessions = relationship("DepartmentSession", back_populates="company")
@@ -51,9 +50,12 @@ class Employee(Base):
     last_login = Column(DateTime)
     deleted_at = Column(DateTime, nullable=True)
     
+    # ✅ ADDED THIS MISSING COLUMN
+    status = Column(String, default="active") 
+
     # Security Features
     device_id = Column(String, nullable=True) 
-    role = Column(String, default="normal") # 'normal' or 'marketing'
+    role = Column(String, default="normal") 
     
     company = relationship("Company", back_populates="employees")
     tracking_sessions = relationship("DepartmentSession", back_populates="employee")
@@ -103,7 +105,7 @@ class Attendance(Base):
     check_in_time = Column(DateTime)
     check_out_time = Column(DateTime, nullable=True)
 
-    source = Column(String, default="MOBILE")  # 'MOBILE', 'ZKTECO', 'WEB_ADMIN'
+    source = Column(String, default="MOBILE") 
     device_id = Column(String, nullable=True)
 
 class HardwareDevice(Base):
@@ -112,10 +114,10 @@ class HardwareDevice(Base):
     
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
     
-    device_uid = Column(String, unique=True, index=True) # e.g. "PI_01"
-    device_type = Column(String)     # 'RASPBERRY_PI', 'ZK_DEVICE'
-    location = Column(String)        # 'Front Door'
-    secret_key = Column(String)      # The password for the device
+    device_uid = Column(String, unique=True, index=True)
+    device_type = Column(String)
+    location = Column(String)
+    secret_key = Column(String)
     active = Column(Boolean, default=True)
     
     company = relationship("Company")
@@ -127,7 +129,7 @@ class DoorEvent(Base):
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
     employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
     
-    event_type = Column(String)     # 'AUTO_OPEN', 'ADMIN_OPEN'
-    trigger_reason = Column(String) # 'CHECK_IN', 'EMERGENCY'
+    event_type = Column(String)
+    trigger_reason = Column(String)
     device_id = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
