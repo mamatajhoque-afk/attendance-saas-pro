@@ -5,6 +5,8 @@ pydantic==2.5.3
 pydantic-settings==2.1.0
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+# 👇 THIS FIXES THE CRASH
+bcrypt==3.2.0
 python-multipart==0.0.6
 requests==2.31.0
 pytz==2023.3.post1
