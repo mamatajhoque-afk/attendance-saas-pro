@@ -7,12 +7,13 @@ from app.db.models import LocationLog, Employee, Attendance
 from app.db.database import get_db
 from app.db.models import Employee, Company, Attendance, CompanyAdmin
 from app.core.security import get_password_hash
-from app.schemas.schemas import EmployeeCreate, OfficeSettings, ManualAttendance, EmployeeResponse
-from app.schemas.schemas import EmployeeUpdate, ManualAttendance, EmergencyOpen
+from app.schemas.schemas import EmployeeCreate, OfficeSettings, ManualAttendance, EmployeeResponse, ManualAttendance, EmployeeUpdate, TokenData, EmergencyOpen
+
 from app.db.models import HardwareDevice, DoorEvent 
 from app.routers.auth import oauth2_scheme  # fro We need to verify tokens
 from jose import jwt
 from app.core.config import settings
+from app.routers.auth import get_current_active_admin
 
 router = APIRouter()
 

@@ -114,3 +114,9 @@ class ManualAttendance(BaseModel):
 class EmergencyOpen(BaseModel):
     device_id: int
     reason: str
+
+# [ADD THIS NEW CLASS]
+class TokenData(BaseModel):
+    username: Optional[str] = None
+    role: Optional[str] = None
+    company_id: Optional[int] = None
