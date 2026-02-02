@@ -6,20 +6,31 @@ import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css'; 
 import { 
   LogOut, User, Calendar as CalendarIcon, 
-  CheckCircle, AlertTriangle 
+  CheckCircle, AlertTriangle, XCircle, BarChart3
 } from 'lucide-react';
 
 const EmployeeDashboard = () => {
   const [profile, setProfile] = useState(null);
-  const [history, setHistory] = useState([]); // Store attendance logs
+  const [history, setHistory] = useState([]); 
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [todayLog, setTodayLog] = useState(null); // Log for the clicked date
+  const [todayLog, setTodayLog] = useState(null); 
+  
+  // ✅ NEW: State for Monthly Stats
+  const [stats, setStats] = useState({ present: 0, late: 0, absent: 0 });
+
   const navigate = useNavigate();
 
   useEffect(() => {
     loadProfile();
     loadHistory();
   }, []);
+
+  // ✅ NEW: Calculate Stats whenever history loads
+  useEffect(() => {
+    if (history.length > 0) {
+      calculateMonthlyStats();
+    }
+  }, [history]);
 
   const loadProfile = async () => {
     try {
@@ -40,10 +51,45 @@ const EmployeeDashboard = () => {
     }
   };
 
-  // 🎨 COLOR THE CALENDAR TILES
+  // 📊 LOGIC: Calculate Present, Late, and Absent for THIS Month
+  const calculateMonthlyStats = () => {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    // 1. Filter logs for ONLY this month
+    const thisMonthLogs = history.filter(log => {
+      const logDate = new Date(log.timestamp);
+      return logDate.getMonth() === currentMonth && logDate.getFullYear() === currentYear;
+    });
+
+    // 2. Count Present & Late
+    const presentCount = thisMonthLogs.filter(l => l.status === 'Present').length;
+    const lateCount = thisMonthLogs.filter(l => l.status === 'Late').length;
+
+    // 3. Calculate Absent (Smart Logic: Business Days passed - Attendance)
+    // We assume Mon-Fri are working days.
+    let workingDaysSoFar = 0;
+    const today = now.getDate();
+    
+    for (let i = 1; i <= today; i++) {
+      const dayCheck = new Date(currentYear, currentMonth, i);
+      const dayOfWeek = dayCheck.getDay();
+      // 0 = Sunday, 6 = Saturday. Count only Mon(1) to Fri(5)
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        workingDaysSoFar++;
+      }
+    }
+
+    // Absent cannot be negative (in case of extra work on weekends)
+    const totalAttended = presentCount + lateCount;
+    const absentCount = Math.max(0, workingDaysSoFar - totalAttended);
+
+    setStats({ present: presentCount, late: lateCount, absent: absentCount });
+  };
+
   const getTileClassName = ({ date, view }) => {
     if (view === 'month') {
-      // Find log for this specific date
       const log = history.find(h => {
         const hDate = new Date(h.timestamp);
         return hDate.getDate() === date.getDate() &&
@@ -60,7 +106,6 @@ const EmployeeDashboard = () => {
     return null;
   };
 
-  // 👋 HANDLE DATE CLICK
   const handleDateClick = (date) => {
     setSelectedDate(date);
     const log = history.find(h => {
@@ -83,10 +128,8 @@ const EmployeeDashboard = () => {
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
       <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* === LEFT COLUMN: PROFILE & ACTIONS === */}
+        {/* === LEFT COLUMN === */}
         <div className="space-y-6">
-          
-          {/* 1. Profile Card */}
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 text-center">
             <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600">
               <User size={32} />
@@ -98,16 +141,15 @@ const EmployeeDashboard = () => {
             </div>
           </div>
 
-          {/* 2. Logout Button (Moved up since Quick Actions is gone) */}
           <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 text-red-500 font-bold p-4 hover:bg-red-50 rounded-xl transition border border-transparent hover:border-red-100 bg-white shadow-sm">
             <LogOut size={18}/> Logout
           </button>
         </div>
 
-        {/* === RIGHT COLUMN: ATTENDANCE CALENDAR === */}
+        {/* === RIGHT COLUMN === */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* 1. Calendar Card */}
+          {/* 1. Calendar */}
           <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
@@ -158,6 +200,40 @@ const EmployeeDashboard = () => {
             ) : (
               <p className="text-slate-400 italic">No attendance record for this day.</p>
             )}
+          </div>
+
+          {/* ✅ 3. NEW: Monthly Statistics Card */}
+          <div className="bg-slate-800 text-white p-6 rounded-2xl shadow-lg">
+            <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-200">
+              <BarChart3 size={20}/> This Month's Summary
+            </h3>
+            <div className="grid grid-cols-3 gap-4 text-center">
+              
+              {/* PRESENT */}
+              <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600">
+                <div className="text-3xl font-bold text-green-400 mb-1">{stats.present}</div>
+                <div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1">
+                  <CheckCircle size={12}/> Present
+                </div>
+              </div>
+
+              {/* LATE */}
+              <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600">
+                <div className="text-3xl font-bold text-orange-400 mb-1">{stats.late}</div>
+                <div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1">
+                  <AlertTriangle size={12}/> Late
+                </div>
+              </div>
+
+              {/* ABSENT */}
+              <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600">
+                <div className="text-3xl font-bold text-red-400 mb-1">{stats.absent}</div>
+                <div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1">
+                  <XCircle size={12}/> Absent
+                </div>
+              </div>
+
+            </div>
           </div>
 
         </div>
