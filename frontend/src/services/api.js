@@ -91,7 +91,13 @@ export const companyService = {
     return api.post('/company/settings/location', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
-  }
+  },
+  // Schedule function
+  updateSchedule: (startTime, endTime) => api.post('/company/settings/schedule', {
+    work_start_time: startTime,
+    work_end_time: endTime
+  })
+
 };
 
 export const employeeService = {
