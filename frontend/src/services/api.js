@@ -82,12 +82,11 @@ export const companyService = {
   emergencyOpen: (deviceId, reason) => api.post('/company/devices/emergency-open', { device_id: deviceId, reason }),
 
 // ✅ FIXED: Added headers to force 'multipart/form-data'
-  updateSettings: (lat, lng, radius, timezone) => {
+  updateSettings: (lat, lng, radius) => {
     const formData = new FormData();
     formData.append('lat', lat);
     formData.append('lng', lng);
     formData.append('radius', radius);
-    formData.append('timezone', timezone); 
     
     return api.post('/company/settings/location', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
