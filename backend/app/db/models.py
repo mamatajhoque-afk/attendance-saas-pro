@@ -108,6 +108,11 @@ class Attendance(Base):
     source = Column(String, default="MOBILE") 
     device_id = Column(String, nullable=True)
 
+    # ✅ ADDED THESE 3 MISSING COLUMNS
+    type = Column(String, nullable=True)       # 'check_in' or 'check_out'
+    method = Column(String, nullable=True)     # 'MANUAL_ADMIN', 'GPS', etc.
+    image_url = Column(String, nullable=True)  # Used for notes
+
 class HardwareDevice(Base):
     __tablename__ = "hardware_devices"
     id = Column(Integer, primary_key=True)
