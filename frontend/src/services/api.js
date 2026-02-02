@@ -102,6 +102,7 @@ export const companyService = {
 
 export const employeeService = {
   getProfile: () => api.get('/api/me'),
+  getHistory: () => api.get('/api/me/attendance'),
   markAttendance: (id, location) => api.post('/api/mark_attendance', {
     employee_id: id,
     location: location

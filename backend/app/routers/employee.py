@@ -146,3 +146,16 @@ def get_live_map(db: Session = Depends(get_db)):
     # In a perfect world, move this to company.py and add Admin Auth.
     # For now, I will leave it open or you can import get_current_admin
     pass
+
+# 6. Get Attendance History
+@router.get("/api/me/attendance")
+def get_my_attendance(
+    current_user: Employee = Depends(get_current_employee),
+    db: Session = Depends(get_db)
+):
+    # Fetch last 60 days of history for this employee
+    logs = db.query(Attendance).filter(
+        Attendance.employee_id == current_user.employee_id
+    ).order_by(Attendance.timestamp.desc()).limit(60).all()
+    
+    return logs
