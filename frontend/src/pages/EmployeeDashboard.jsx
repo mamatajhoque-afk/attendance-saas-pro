@@ -88,19 +88,25 @@ const EmployeeDashboard = () => {
     setStats({ present: presentCount, late: lateCount, absent: absentCount });
   };
 
+// 🎨 [FIXED] Calendar Colors for Employee View
   const getTileClassName = ({ date, view }) => {
     if (view === 'month') {
-      const log = history.find(h => {
-        const hDate = new Date(h.timestamp);
-        return hDate.getDate() === date.getDate() &&
-               hDate.getMonth() === date.getMonth() &&
-               hDate.getFullYear() === date.getFullYear();
-      });
+      const dateStr = date.toDateString();
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // 1. Check for Existing Logs (using 'history' state)
+      const log = history.find(l => new Date(l.timestamp).toDateString() === dateStr);
 
       if (log) {
         return log.status === 'Late' 
-          ? 'bg-orange-100 text-orange-600 font-bold rounded-full' 
-          : 'bg-green-100 text-green-600 font-bold rounded-full';
+          ? 'bg-orange-100 text-orange-600 font-bold rounded-md' 
+          : 'bg-green-100 text-green-600 font-bold rounded-md';
+      }
+
+      // 2. Check for Absent
+      if (date < today && date.getDay() !== 0 && date.getDay() !== 6) {
+        return 'bg-red-100 text-red-600 font-bold rounded-md';
       }
     }
     return null;
