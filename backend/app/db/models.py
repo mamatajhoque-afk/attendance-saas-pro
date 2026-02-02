@@ -29,6 +29,9 @@ class Company(Base):
     # ✅ NEW: WORK SCHEDULE
     work_start_time = Column(String, default="09:00") # Format "HH:MM"
     work_end_time = Column(String, default="17:00")   # Format "HH:MM"
+
+    #TIMEZONE SETTING
+    timezone = Column(String, default="Asia/Dhaka")
     
     admins = relationship("CompanyAdmin", back_populates="company")
     employees = relationship("Employee", back_populates="company")

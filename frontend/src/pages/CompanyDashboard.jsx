@@ -19,7 +19,7 @@ const CompanyDashboard = () => {
   const [manualAtt, setManualAtt] = useState({ employee_id: '', type: 'check_in', date: '', time: '' });
   
   // Settings & Schedule
-  const [settings, setSettings] = useState({ lat: '', lng: '', radius: '50' });
+  const [settings, setSettings] = useState({ lat: '', lng: '', radius: '50', timezone: 'Asia/Dhaka' });
   const [schedule, setSchedule] = useState({ start: '09:00', end: '17:00' });
 
   // [NEW] Calendar State
@@ -41,6 +41,15 @@ const CompanyDashboard = () => {
       await companyService.updateSchedule(schedule.start, schedule.end);
       toast.success("Work Schedule Updated 🕒");
     } catch (err) { toast.error("Failed to update schedule"); }
+  };
+
+  const handleSaveSettings = async (e) => {
+    e.preventDefault();
+    try {
+      // Pass all 4 arguments now
+      await companyService.updateSettings(settings.lat, settings.lng, settings.radius, settings.timezone);
+      toast.success("Settings Updated ✅");
+    } catch (err) { toast.error("Update failed"); }
   };
 
   const loadEmployees = async () => {
@@ -274,7 +283,57 @@ const CompanyDashboard = () => {
 
         {activeTab === 'settings' && (
            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+             
+             {/* === LEFT COLUMN: LOCATION & TIMEZONE (NEW) === */}
              <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 h-fit">
+              <h2 className="font-bold text-xl mb-6 flex items-center gap-2 text-slate-800">
+                <MapPin className="text-blue-500"/> Office Location & Time
+              </h2>
+              <form onSubmit={handleSaveSettings} className="space-y-4">
+                
+                {/* Lat/Lng Inputs */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Latitude</label>
+                    <input className="w-full border p-2 rounded" value={settings.lat} onChange={e => setSettings({...settings, lat: e.target.value})} required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Longitude</label>
+                    <input className="w-full border p-2 rounded" value={settings.lng} onChange={e => setSettings({...settings, lng: e.target.value})} required />
+                  </div>
+                </div>
+
+                {/* Radius Input */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Geofence Radius (Meters)</label>
+                  <input type="number" className="w-full border p-2 rounded" value={settings.radius} onChange={e => setSettings({...settings, radius: e.target.value})} required />
+                </div>
+
+                {/* ✅ TIMEZONE DROPDOWN */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Time Zone</label>
+                  <select 
+                    className="w-full border p-2 rounded bg-white"
+                    value={settings.timezone}
+                    onChange={e => setSettings({...settings, timezone: e.target.value})}
+                  >
+                    <option value="Asia/Dhaka">Bangladesh (GMT+6)</option>
+                    <option value="Asia/Kolkata">India (GMT+5:30)</option>
+                    <option value="Asia/Dubai">Dubai (GMT+4)</option>
+                    <option value="Europe/London">London (GMT+0)</option>
+                    <option value="America/New_York">New York (GMT-5)</option>
+                    <option value="UTC">Universal Time (UTC)</option>
+                  </select>
+                </div>
+
+                <button className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded">
+                  Save Location & Time
+                </button>
+              </form>
+            </div>
+
+            {/* === RIGHT COLUMN: WORK SCHEDULE (EXISTING) === */}
+            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 h-fit">
               <h2 className="font-bold text-xl mb-6 flex items-center gap-2 text-slate-800">
                 <Clock className="text-blue-500"/> Work Schedule
               </h2>
@@ -294,6 +353,7 @@ const CompanyDashboard = () => {
                 </button>
               </form>
             </div>
+
            </div>
         )}
 

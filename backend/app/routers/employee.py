@@ -11,7 +11,6 @@ from jose import jwt
 from app.core.config import settings
 
 router = APIRouter()
-dhaka_zone = pytz.timezone('Asia/Dhaka')
 
 # --- HELPER: Verify Employee Token ---
 def get_current_employee(token: str = Depends(oauth2_scheme)):
@@ -52,7 +51,19 @@ def mark_attendance(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_employee) 
 ):
-    now = datetime.now(dhaka_zone)
+# 1. Get Employee's Company to find their Timezone
+    company = db.query(Company).filter(Company.id == user["company_id"]).first()
+    if not company: raise HTTPException(404, "Company config not found")
+
+    # 2. ✅ DYNAMIC TIMEZONE LOGIC
+    try:
+        target_tz = pytz.timezone(company.timezone) # e.g. "Asia/Dhaka"
+    except:
+        target_tz = pytz.timezone("UTC") # Fallback
+    
+    # Get current time in THAT timezone, then strip info for DB
+    now_aware = datetime.now(target_tz)
+    now = now_aware.replace(tzinfo=None) 
     today = now.date()
     
     if payload.employee_id != user["sub"]:

@@ -245,6 +245,7 @@ def update_settings(
     lat: str = Form(...), 
     lng: str = Form(...), 
     radius: str = Form(...),
+    timezone: str = Form(...),  # ✅ NEW PARAMETER
     current_user: TokenData = Depends(get_current_active_admin),
     db: Session = Depends(get_db)
 ):
@@ -254,6 +255,7 @@ def update_settings(
     company.office_lat = lat
     company.office_lng = lng
     company.office_radius = radius
+    company.timezone = timezone  # ✅ SAVE TIMEZONE
     db.commit()
     return {"status": "success", "message": "Office Location Updated"}
 
