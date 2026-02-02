@@ -4,7 +4,7 @@ from datetime import datetime
 import pytz
 
 from app.db.database import get_db
-from app.db.models import Employee, Attendance, DepartmentSession, LocationLog
+from app.db.models import Employee, Attendance, DepartmentSession, LocationLog, Company
 from app.schemas.schemas import AttendanceMark, TrackingStart, LocationUpdate
 from app.routers.auth import oauth2_scheme
 from jose import jwt
@@ -45,18 +45,16 @@ def get_my_profile(db: Session = Depends(get_db), user: dict = Depends(get_curre
         }
     }
 
-# 2. MARK ATTENDANCE (GPS)
+# 2. MARK ATTENDANCE (GPS) - UPDATED
 @router.post("/api/mark_attendance")
 def mark_attendance(
     payload: AttendanceMark,
     db: Session = Depends(get_db),
-    # Logic note: We trust the payload ID if token is valid, or you can force user['sub']
     user: dict = Depends(get_current_employee) 
 ):
     now = datetime.now(dhaka_zone)
     today = now.date()
     
-    # Verify the employee ID matches the token (Security)
     if payload.employee_id != user["sub"]:
         raise HTTPException(403, "Cannot mark attendance for another user")
         
@@ -66,24 +64,34 @@ def mark_attendance(
     ).first()
     
     if not existing:
-        # Check In
+        # 🕒 CHECK LATE STATUS
+        status = "Present"
+        company = db.query(Company).filter(Company.id == user["company_id"]).first()
+        
+        if company and company.work_start_time:
+            # Convert string "09:00" to time object
+            start_dt = datetime.strptime(company.work_start_time, "%H:%M").time()
+            # Compare current time (now) with start time
+            if now.time() > start_dt:
+                status = "Late"
+
         db.add(Attendance(
             company_id=user["company_id"],
             employee_id=payload.employee_id,
             timestamp=now,
             date_only=today,
-            status="Present",
+            status=status, # ✅ "Present" or "Late"
             location=payload.location,
             source="MOBILE",
+            type="check_in",
             check_in_time=now
         ))
-        msg = "Checked In"
+        msg = f"Checked In ({status})"
     else:
-        # Check Out (Debounce 1 min)
         if (now - existing.check_in_time).total_seconds() < 60:
              return {"status": "ignored", "message": "Too soon to check out"}
-        
         existing.check_out_time = now
+        existing.type = "check_out"
         msg = "Checked Out"
         
     db.commit()

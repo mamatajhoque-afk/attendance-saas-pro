@@ -25,6 +25,10 @@ class Company(Base):
     office_lat = Column(String, default="23.8103")
     office_lng = Column(String, default="90.4125")
     office_radius = Column(String, default="50")
+
+    # ✅ NEW: WORK SCHEDULE
+    work_start_time = Column(String, default="09:00") # Format "HH:MM"
+    work_end_time = Column(String, default="17:00")   # Format "HH:MM"
     
     admins = relationship("CompanyAdmin", back_populates="company")
     employees = relationship("Employee", back_populates="company")

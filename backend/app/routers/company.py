@@ -160,17 +160,30 @@ def mark_manual_attendance(
     
     if not emp: raise HTTPException(404, "Employee not found")
     
-    # Calculate fields
     record_time = payload.timestamp
     record_date = record_time.date()
     
+    # 🕒 LATE CHECK LOGIC
+    status = "Present"
+    if payload.type == 'check_in':
+        # Get Company Schedule
+        company = db.query(Company).filter(Company.id == current_user.company_id).first()
+        if company and company.work_start_time:
+            # Parse times
+            work_start = datetime.strptime(company.work_start_time, "%H:%M").time()
+            check_in_time = record_time.time()
+            
+            # If checked in AFTER start time, mark Late
+            if check_in_time > work_start:
+                status = "Late"
+
     new_log = Attendance(
-        company_id=current_user.company_id, # ✅ Added
-        employee_id=emp.employee_id,        # ✅ Fixed (String ID)
+        company_id=current_user.company_id,
+        employee_id=emp.employee_id,
         timestamp=record_time,
-        date_only=record_date,              # ✅ Added
-        status="Present",
-        type=payload.type,                  # 'check_in' or 'check_out'
+        date_only=record_date,
+        status=status, # ✅ Now saves "Late" or "Present"
+        type=payload.type,
         check_in_time=record_time if payload.type == 'check_in' else None,
         check_out_time=record_time if payload.type == 'check_out' else None,
         method="MANUAL_ADMIN",
@@ -178,7 +191,7 @@ def mark_manual_attendance(
     )
     db.add(new_log)
     db.commit()
-    return {"status": "success", "message": "Attendance marked"}
+    return {"status": "success", "message": f"Attendance marked ({status})"}
 
 # 8. EMERGENCY OPEN
 @router.post("/company/devices/emergency-open")
@@ -230,3 +243,18 @@ def update_settings(
     company.office_radius = radius
     db.commit()
     return {"status": "success", "message": "Office Location Updated"}
+
+# 11. [NEW] UPDATE SCHEDULE
+@router.post("/company/settings/schedule")
+def update_schedule(
+    payload: ScheduleUpdate,
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    company = db.query(Company).filter(Company.id == current_user.company_id).first()
+    if not company: raise HTTPException(404, "Company not found")
+    
+    company.work_start_time = payload.start_time
+    company.work_end_time = payload.end_time
+    db.commit()
+    return {"status": "success", "message": "Work Schedule Updated"}

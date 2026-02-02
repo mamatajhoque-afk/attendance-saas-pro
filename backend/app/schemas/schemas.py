@@ -91,3 +91,8 @@ class HardwareLog(BaseModel):
 class EmergencyOpen(BaseModel):
     device_id: int
     reason: str
+
+# [NEW] Schedule Settings
+class ScheduleUpdate(BaseModel):
+    start_time: str # "09:00"
+    end_time: str   # "17:00"

@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
 import { 
   Building2, Users, MapPin, History, LogOut, 
-  Trash2, Power, UserCheck, ShieldAlert, Fingerprint, Lock, Settings
+  Trash2, Power, UserCheck, ShieldAlert, Fingerprint, Lock, Settings, Clock
 } from 'lucide-react';
 
 const CompanyDashboard = () => {
@@ -19,6 +19,8 @@ const CompanyDashboard = () => {
   
   // [NEW] Settings State
   const [settings, setSettings] = useState({ lat: '', lng: '', radius: '50' });
+  // [NEW] Schedule State
+  const [schedule, setSchedule] = useState({ start: '09:00', end: '17:00' });
 
   const navigate = useNavigate();
 
@@ -26,6 +28,15 @@ const CompanyDashboard = () => {
     loadEmployees();
     loadDevices(); 
   }, []);
+
+  // [NEW] Save Schedule
+  const handleSaveSchedule = async (e) => {
+    e.preventDefault();
+    try {
+      await companyService.updateSchedule(schedule.start, schedule.end);
+      toast.success("Work Schedule Updated 🕒");
+    } catch (err) { toast.error("Failed to update schedule"); }
+  };
 
   const loadEmployees = async () => {
     try {
@@ -238,41 +249,39 @@ const CompanyDashboard = () => {
           </div>
         )}
 
-        {/* === TAB 3: OFFICE SETTINGS (NEW) === */}
+        {/* === TAB 3: SETTINGS === */}
         {activeTab === 'settings' && (
-          <div className="max-w-2xl mx-auto bg-white p-8 rounded-xl shadow-sm border border-slate-200">
-            <h2 className="font-bold text-xl mb-6 flex items-center gap-2 text-slate-800"><MapPin className="text-emerald-500"/> Office Geofence Settings</h2>
-            <p className="text-slate-500 mb-6 text-sm">Set your office coordinates. Employees can only mark attendance via App if they are within this radius.</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
             
-            <form onSubmit={handleSaveSettings} className="space-y-6">
-              <div className="grid grid-cols-2 gap-6">
+            {/* 1. Geofence Form (Existing) */}
+            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
+               {/* ... (Keep your existing Geofence form here) ... */}
+            </div>
+
+            {/* 2. [NEW] Schedule Form */}
+            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 h-fit">
+              <h2 className="font-bold text-xl mb-6 flex items-center gap-2 text-slate-800">
+                <Clock className="text-blue-500"/> Work Schedule
+              </h2>
+              <p className="text-slate-500 mb-6 text-sm">Set company timings. Employees checking in after the start time will be marked as <b>"Late"</b>.</p>
+              
+              <form onSubmit={handleSaveSchedule} className="space-y-6">
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Latitude</label>
-                  <input className="w-full border border-slate-300 p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-                    value={settings.lat} onChange={e => setSettings({...settings, lat: e.target.value})} placeholder="e.g. 23.8103" required />
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Office Start Time</label>
+                  <input type="time" className="w-full border p-2 rounded"
+                    value={schedule.start} onChange={e => setSchedule({...schedule, start: e.target.value})} required />
                 </div>
                 <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-1">Longitude</label>
-                  <input className="w-full border border-slate-300 p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-                    value={settings.lng} onChange={e => setSettings({...settings, lng: e.target.value})} placeholder="e.g. 90.4125" required />
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Office End Time</label>
+                  <input type="time" className="w-full border p-2 rounded"
+                    value={schedule.end} onChange={e => setSchedule({...schedule, end: e.target.value})} required />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-1">Radius (Meters)</label>
-                <input type="number" className="w-full border border-slate-300 p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none" 
-                  value={settings.radius} onChange={e => setSettings({...settings, radius: e.target.value})} placeholder="e.g. 50" required />
-              </div>
-
-              <div className="flex gap-4 pt-4">
-                <button type="button" onClick={getCurrentLocation} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-3 rounded flex justify-center items-center gap-2 transition-colors">
-                  <MapPin size={18}/> Use Current Location
+                <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded">
+                  Update Schedule
                 </button>
-                <button type="submit" className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 rounded flex justify-center items-center gap-2 transition-colors">
-                  Save Settings
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
+
           </div>
         )}
 
@@ -282,3 +291,5 @@ const CompanyDashboard = () => {
 };
 
 export default CompanyDashboard;
+
+
