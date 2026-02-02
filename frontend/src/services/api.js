@@ -81,12 +81,16 @@ export const companyService = {
   getDevices: () => api.get('/company/devices'),
   emergencyOpen: (deviceId, reason) => api.post('/company/devices/emergency-open', { device_id: deviceId, reason }),
 
+// ✅ FIXED: Added headers to force 'multipart/form-data'
   updateSettings: (lat, lng, radius) => {
     const formData = new FormData();
     formData.append('lat', lat);
     formData.append('lng', lng);
     formData.append('radius', radius);
-    return api.post('/company/settings/location', formData);
+    
+    return api.post('/company/settings/location', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
   }
 };
 
