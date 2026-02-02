@@ -23,10 +23,11 @@ const EmployeeDashboard = () => {
     loadHistory();
   }, []);
 
+  // Recalculate stats whenever history updates
   useEffect(() => {
     if (history.length > 0) {
-      calculateMonthlyStats();
-      handleDateClick(new Date());
+      calculateMonthlyStats(new Date()); // Calculate for current month initially
+      handleDateClick(new Date());     // Select today
     }
   }, [history]);
 
@@ -43,19 +44,21 @@ const EmployeeDashboard = () => {
   const loadHistory = async () => {
     try {
       const res = await employeeService.getHistory();
-      // Remove duplicates based on 'date_only' to prevent double counting
-      const uniqueHistory = [];
-      const seenDates = new Set();
-
+      
+      // ✅ FIX 1: DEDUPLICATE HISTORY (Keep only the first log per day)
+      // This prevents "3 Presents" for 1 day in the stats.
+      const uniqueMap = new Map();
       res.data.forEach(log => {
-        if (!seenDates.has(log.date_only)) {
-          seenDates.add(log.date_only);
-          uniqueHistory.push(log);
+        // Assume log.date_only is "YYYY-MM-DD"
+        if (!uniqueMap.has(log.date_only)) {
+          uniqueMap.set(log.date_only, log);
         }
       });
-
-      console.log("Unique History:", uniqueHistory);
+      
+      const uniqueHistory = Array.from(uniqueMap.values());
+      console.log("Unique Daily Logs:", uniqueHistory); // Debugging
       setHistory(uniqueHistory);
+
     } catch (err) {
       console.error("Failed to load history");
     }
@@ -76,11 +79,11 @@ const EmployeeDashboard = () => {
     setTodayLog(log || null);
   };
 
-  const calculateMonthlyStats = () => {
-    const now = new Date();
-    // Use selected date's month/year if viewing past/future, otherwise current
-    const viewYear = selectedDate.getFullYear();
-    const viewMonth = selectedDate.getMonth();
+  // ✅ FIX 2: ROBUST STATS CALCULATION
+  const calculateMonthlyStats = (referenceDate) => {
+    // We calculate stats for the MONTH currently being viewed (referenceDate)
+    const viewYear = referenceDate.getFullYear();
+    const viewMonth = referenceDate.getMonth();
 
     const thisMonthLogs = history.filter(log => {
       if (!log.date_only) return false;
@@ -88,13 +91,21 @@ const EmployeeDashboard = () => {
       return (m - 1) === viewMonth && y === viewYear;
     });
 
-    // Count Present & Late
-    const presentCount = thisMonthLogs.filter(l => l.status === 'Present').length;
-    const lateCount = thisMonthLogs.filter(l => l.status === 'Late').length;
+    // Count Present & Late (Case Insensitive)
+    let presentCount = 0;
+    let lateCount = 0;
 
-    // Calculate Business Days so far in that month
+    thisMonthLogs.forEach(l => {
+        const status = l.status ? l.status.toLowerCase() : "";
+        if (status === 'late') lateCount++;
+        else if (status === 'present') presentCount++;
+    });
+
+    // Calculate Absent Days (Business Days Passed - Attended Days)
     let workingDaysCount = 0;
-    // If viewing current month, stop at today. If past month, count all days.
+    const now = new Date();
+    
+    // Determine the last day to count (Today if current month, else end of month)
     const isCurrentMonth = viewMonth === now.getMonth() && viewYear === now.getFullYear();
     const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
     const limitDay = isCurrentMonth ? now.getDate() : daysInMonth;
@@ -102,15 +113,19 @@ const EmployeeDashboard = () => {
     for (let i = 1; i <= limitDay; i++) {
       const dayCheck = new Date(viewYear, viewMonth, i);
       const dayOfWeek = dayCheck.getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 6) workingDaysCount++;
+      // Exclude Sun(0) and Sat(6)
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) {
+        workingDaysCount++;
+      }
     }
 
     const totalAttended = presentCount + lateCount;
+    // Absent cannot be negative
     const absentCount = Math.max(0, workingDaysCount - totalAttended);
+
     setStats({ present: presentCount, late: lateCount, absent: absentCount });
   };
 
-  // 🎨 Calendar Tile Logic
   const getTileClassName = ({ date, view }) => {
     if (view === 'month') {
       const dateKey = formatDateKey(date); 
@@ -120,12 +135,14 @@ const EmployeeDashboard = () => {
       const log = history.find(l => l.date_only === dateKey);
       
       if (log) {
-        return (log.status && log.status.toLowerCase() === 'late')
+        // Case insensitive check
+        const isLate = log.status && log.status.toLowerCase() === 'late';
+        return isLate 
           ? 'bg-orange-100 text-orange-600 font-bold rounded-md' 
           : 'bg-green-100 text-green-600 font-bold rounded-md';
       }
 
-      // Absent: Past Weekday + No Log
+      // Check for Absent
       if (date < today && date.getDay() !== 0 && date.getDay() !== 6) {
         return 'bg-red-100 text-red-600 font-bold rounded-md';
       }
@@ -144,7 +161,7 @@ const EmployeeDashboard = () => {
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
       <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
         
-        {/* Profile Card */}
+        {/* Left Column: Profile */}
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 text-center">
             <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600"><User size={32} /></div>
@@ -155,7 +172,7 @@ const EmployeeDashboard = () => {
           <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 text-red-500 font-bold p-4 hover:bg-red-50 rounded-xl transition border border-transparent hover:border-red-100 bg-white shadow-sm"><LogOut size={18}/> Logout</button>
         </div>
 
-        {/* Calendar & Stats */}
+        {/* Right Column: Calendar */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200">
             <div className="flex justify-between items-center mb-6">
@@ -169,12 +186,8 @@ const EmployeeDashboard = () => {
             <div className="calendar-wrapper custom-calendar">
               <Calendar 
                 onChange={handleDateClick} 
-                onActiveStartDateChange={({ activeStartDate }) => {
-                  // Re-calculate stats when user switches months
-                  setSelectedDate(activeStartDate);
-                  // We need to trigger a re-render or effect. 
-                  // For simplicity, we just set state which triggers the render calculation logic 
-                }}
+                // Recalculate stats when user changes the month view
+                onActiveStartDateChange={({ activeStartDate }) => calculateMonthlyStats(activeStartDate)}
                 value={selectedDate} 
                 tileClassName={getTileClassName} 
                 className="w-full border-none font-sans text-sm"
@@ -186,11 +199,10 @@ const EmployeeDashboard = () => {
             <h3 className="text-sm font-bold text-slate-500 uppercase mb-4">Details for {selectedDate.toDateString()}</h3>
             {todayLog ? (
               <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-full ${todayLog.status === 'Late' ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>{todayLog.status === 'Late' ? <AlertTriangle size={24}/> : <CheckCircle size={24}/>}</div>
+                <div className={`p-3 rounded-full ${todayLog.status && todayLog.status.toLowerCase() === 'late' ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'}`}>{todayLog.status && todayLog.status.toLowerCase() === 'late' ? <AlertTriangle size={24}/> : <CheckCircle size={24}/>}</div>
                 <div>
                   <h4 className="font-bold text-lg text-slate-800">You were {todayLog.status}</h4>
                   <p className="text-slate-500 text-sm">Punch In Time: <span className="font-mono text-slate-700 font-bold">
-                    {/* Display Time from Timestamp safely */}
                     {new Date(todayLog.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span></p>
                 </div>
@@ -198,8 +210,9 @@ const EmployeeDashboard = () => {
             ) : (<p className="text-slate-400 italic">No attendance record for this day.</p>)}
           </div>
 
+          {/* Stats Section */}
           <div className="bg-slate-800 text-white p-6 rounded-2xl shadow-lg">
-            <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-200"><BarChart3 size={20}/> Summary for {selectedDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</h3>
+            <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-200"><BarChart3 size={20}/> Monthly Summary</h3>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600"><div className="text-3xl font-bold text-green-400 mb-1">{stats.present}</div><div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1"><CheckCircle size={12}/> Present</div></div>
               <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600"><div className="text-3xl font-bold text-orange-400 mb-1">{stats.late}</div><div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1"><AlertTriangle size={12}/> Late</div></div>
