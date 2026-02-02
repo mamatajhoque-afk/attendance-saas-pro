@@ -31,7 +31,6 @@ def add_employee(
     current_user: TokenData = Depends(get_current_active_admin),
     db: Session = Depends(get_db)
 ):
-    # Check duplicate
     exists = db.query(Employee).filter(
         Employee.employee_id == payload.employee_id,
         Employee.company_id == current_user.company_id
@@ -39,7 +38,6 @@ def add_employee(
     
     if exists:
         if exists.deleted_at:
-            # Restore soft-deleted employee
             exists.deleted_at = None
             exists.name = payload.name
             exists.password_hash = get_password_hash(payload.password)
@@ -61,7 +59,7 @@ def add_employee(
     db.commit()
     return {"status": "success", "message": "Employee Added"}
 
-# 3. UPDATE EMPLOYEE (Suspend/Rename)
+# 3. UPDATE EMPLOYEE
 @router.put("/company/employees/{emp_db_id}")
 def update_employee(
     emp_db_id: int, 
@@ -101,7 +99,7 @@ def delete_employee(
     db.commit()
     return {"status": "success", "message": "Employee deleted"}
 
-# 5. GET HISTORY
+# 5. GET HISTORY (Fixed: Uses String ID now)
 @router.get("/company/employees/{employee_id}/attendance")
 def get_employee_history(
     employee_id: str, 
@@ -115,8 +113,9 @@ def get_employee_history(
     
     if not employee: raise HTTPException(404, "Employee not found")
         
+    # Fixed: Compare using the String ID ("EMP01") not the Integer ID
     return db.query(Attendance).filter(
-        Attendance.employee_id == employee.id
+        Attendance.employee_id == employee.employee_id 
     ).order_by(Attendance.timestamp.desc()).limit(50).all()
 
 # 6. LIVE TRACKING
@@ -147,7 +146,7 @@ def get_live_tracking(
             })
     return live_data
 
-# 7. MANUAL ATTENDANCE
+# 7. MANUAL ATTENDANCE (✅ FIXED)
 @router.post("/company/attendance/manual")
 def mark_manual_attendance(
     payload: ManualAttendance,
@@ -161,10 +160,19 @@ def mark_manual_attendance(
     
     if not emp: raise HTTPException(404, "Employee not found")
     
+    # Calculate fields
+    record_time = payload.timestamp
+    record_date = record_time.date()
+    
     new_log = Attendance(
-        employee_id=emp.id,
-        timestamp=payload.timestamp,
-        type=payload.type,
+        company_id=current_user.company_id, # ✅ Added
+        employee_id=emp.employee_id,        # ✅ Fixed (String ID)
+        timestamp=record_time,
+        date_only=record_date,              # ✅ Added
+        status="Present",
+        type=payload.type,                  # 'check_in' or 'check_out'
+        check_in_time=record_time if payload.type == 'check_in' else None,
+        check_out_time=record_time if payload.type == 'check_out' else None,
         method="MANUAL_ADMIN",
         image_url=payload.notes 
     )
@@ -205,7 +213,7 @@ def get_company_devices(
         HardwareDevice.company_id == current_user.company_id
     ).all()
 
-# 10. UPDATE OFFICE GEOFENCE (Restored!)
+# 10. UPDATE OFFICE GEOFENCE
 @router.post("/company/settings/location")
 def update_settings(
     lat: str = Form(...), 
