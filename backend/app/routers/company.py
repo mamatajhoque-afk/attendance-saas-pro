@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy.orm import Session
 from datetime import datetime
-
+from pydantic import BaseModel, validator
+import re
 from app.db.database import get_db
 from app.db.models import Employee, Attendance, HardwareDevice, DoorEvent, LocationLog, Company
 from app.core.security import get_password_hash
@@ -10,6 +11,18 @@ from app.schemas.schemas import (
     EmployeeCreate, EmployeeUpdate, ManualAttendance, 
     EmergencyOpen, TokenData, EmployeeResponse
 )
+
+# ✅ ADD THIS CLASS (Schema)
+class ScheduleUpdate(BaseModel):
+    work_start_time: str
+    work_end_time: str
+
+    # Optional: Validates that time is in "HH:MM" format
+    @validator("work_start_time", "work_end_time")
+    def validate_time(cls, v):
+        if not re.match(r"^\d{2}:\d{2}$", v):
+            raise ValueError("Time must be in HH:MM format")
+        return v
 
 router = APIRouter()
 
@@ -258,3 +271,4 @@ def update_schedule(
     company.work_end_time = payload.end_time
     db.commit()
     return {"status": "success", "message": "Work Schedule Updated"}
+
