@@ -2,25 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { companyService } from '../services/api';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
+import Calendar from 'react-calendar'; // 1. IMPORT CALENDAR
+import 'react-calendar/dist/Calendar.css'; // 1. IMPORT CSS
 import { 
   Building2, Users, MapPin, History, LogOut, 
-  Trash2, Power, UserCheck, ShieldAlert, Fingerprint, Lock, Settings, Clock
+  Trash2, Power, UserCheck, ShieldAlert, Fingerprint, Lock, Settings, Clock, X
 } from 'lucide-react';
 
 const CompanyDashboard = () => {
   const [activeTab, setActiveTab] = useState('staff'); 
   const [employees, setEmployees] = useState([]);
   const [devices, setDevices] = useState([]); 
-  const [trackingData, setTrackingData] = useState([]);
   
   // Forms & Modals
   const [newEmp, setNewEmp] = useState({ employee_id: '', name: '', password: '', role: 'Staff' });
   const [manualAtt, setManualAtt] = useState({ employee_id: '', type: 'check_in', date: '', time: '' });
   
-  // [NEW] Settings State
+  // Settings & Schedule
   const [settings, setSettings] = useState({ lat: '', lng: '', radius: '50' });
-  // [NEW] Schedule State
   const [schedule, setSchedule] = useState({ start: '09:00', end: '17:00' });
+
+  // [NEW] Calendar State
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [selectedEmp, setSelectedEmp] = useState(null);
+  const [attendanceHistory, setAttendanceHistory] = useState([]);
 
   const navigate = useNavigate();
 
@@ -29,7 +34,7 @@ const CompanyDashboard = () => {
     loadDevices(); 
   }, []);
 
-  // [NEW] Save Schedule
+  // --- EXISTING FUNCTIONS ---
   const handleSaveSchedule = async (e) => {
     e.preventDefault();
     try {
@@ -101,34 +106,44 @@ const CompanyDashboard = () => {
     } catch (err) { toast.error("Command Failed"); }
   };
 
-  // [NEW] Save Settings
-  const handleSaveSettings = async (e) => {
-    e.preventDefault();
+  // --- [NEW] CALENDAR FUNCTIONS ---
+  
+  const openHistory = async (emp) => {
+    setSelectedEmp(emp);
+    setShowCalendar(true);
+    setAttendanceHistory([]); // Clear previous
     try {
-      await companyService.updateSettings(settings.lat, settings.lng, settings.radius);
-      toast.success("Office Location Updated 📍");
-    } catch (err) { toast.error("Failed to save settings"); }
-  };
-
-  // [NEW] Get Current Location helper
-  const getCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(position => {
-        setSettings({
-          ...settings,
-          lat: position.coords.latitude.toString(),
-          lng: position.coords.longitude.toString()
-        });
-        toast.success("Got your location!");
-      });
-    } else {
-      toast.error("Geolocation not supported");
+      const res = await companyService.getEmployeeHistory(emp.employee_id);
+      setAttendanceHistory(res.data);
+    } catch (err) {
+      toast.error("Could not fetch history");
     }
   };
 
+  // This function decides the color of each date tile
+  const getTileClassName = ({ date, view }) => {
+    if (view === 'month') {
+      // Find logs for this specific date
+      const dayLogs = attendanceHistory.filter(log => {
+        const logDate = new Date(log.timestamp);
+        return logDate.getDate() === date.getDate() &&
+               logDate.getMonth() === date.getMonth() &&
+               logDate.getFullYear() === date.getFullYear();
+      });
+
+      if (dayLogs.length > 0) {
+        // Check if any log is marked "Late"
+        const isLate = dayLogs.some(log => log.status === 'Late');
+        return isLate ? 'bg-orange-100 text-orange-600 font-bold' : 'bg-green-100 text-green-600 font-bold';
+      }
+    }
+    return null;
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 p-8 font-sans">
+    <div className="min-h-screen bg-slate-50 p-8 font-sans relative">
       <div className="max-w-6xl mx-auto">
+        {/* HEADER */}
         <header className="flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
           <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
             <Building2 className="text-blue-600"/> Company Portal
@@ -138,6 +153,7 @@ const CompanyDashboard = () => {
           </button>
         </header>
 
+        {/* TABS */}
         <div className="flex gap-4 mb-6 overflow-x-auto pb-2">
           <button onClick={() => setActiveTab('staff')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'staff' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600'}`}>
             <Users size={18}/> Staff
@@ -153,6 +169,7 @@ const CompanyDashboard = () => {
         {/* === TAB 1: STAFF MANAGEMENT === */}
         {activeTab === 'staff' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* ADD STAFF FORM */}
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
               <h2 className="font-bold mb-4 text-slate-700">Add New Staff</h2>
               <form onSubmit={handleAddEmployee} className="space-y-4">
@@ -167,6 +184,7 @@ const CompanyDashboard = () => {
               </form>
             </div>
 
+            {/* STAFF LIST */}
             <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
               <h2 className="font-bold mb-4 text-slate-700">Staff List</h2>
               <table className="w-full text-left text-sm">
@@ -189,11 +207,17 @@ const CompanyDashboard = () => {
                         </span>
                       </td>
                       <td className="p-3 text-right flex justify-end gap-2">
+                        {/* HISTORY BUTTON */}
+                        <button onClick={() => openHistory(emp)} className="p-2 rounded text-blue-600 bg-blue-50 hover:bg-blue-100" title="View Calendar">
+                          <History size={16}/>
+                        </button>
+                        {/* SUSPEND BUTTON */}
                         <button onClick={() => handleToggleStatus(emp)} 
                           title={emp.status === 'suspended' ? "Activate" : "Suspend"}
                           className={`p-2 rounded ${emp.status === 'suspended' ? 'text-green-600 bg-green-50' : 'text-amber-600 bg-amber-50'}`}>
                           {emp.status === 'suspended' ? <UserCheck size={16}/> : <Power size={16}/>}
                         </button>
+                        {/* DELETE BUTTON */}
                         <button onClick={() => handleDelete(emp.id)} className="p-2 rounded text-red-600 bg-red-50 hover:bg-red-100">
                           <Trash2 size={16}/>
                         </button>
@@ -206,7 +230,7 @@ const CompanyDashboard = () => {
           </div>
         )}
 
-        {/* === TAB 2: CONTROL CENTER === */}
+        {/* === TAB 2 & 3 (Keeping them the same) === */}
         {activeTab === 'control' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
@@ -231,7 +255,6 @@ const CompanyDashboard = () => {
                 <button className="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">Submit</button>
               </form>
             </div>
-
             <div className="bg-white p-6 rounded-xl shadow-sm border border-red-100">
               <h2 className="font-bold mb-4 flex items-center gap-2 text-red-600"><Lock/> Emergency Door Control</h2>
               <div className="space-y-3">
@@ -249,22 +272,12 @@ const CompanyDashboard = () => {
           </div>
         )}
 
-        {/* === TAB 3: SETTINGS === */}
         {activeTab === 'settings' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
-            
-            {/* 1. Geofence Form (Existing) */}
-            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200">
-               {/* ... (Keep your existing Geofence form here) ... */}
-            </div>
-
-            {/* 2. [NEW] Schedule Form */}
-            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 h-fit">
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+             <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 h-fit">
               <h2 className="font-bold text-xl mb-6 flex items-center gap-2 text-slate-800">
                 <Clock className="text-blue-500"/> Work Schedule
               </h2>
-              <p className="text-slate-500 mb-6 text-sm">Set company timings. Employees checking in after the start time will be marked as <b>"Late"</b>.</p>
-              
               <form onSubmit={handleSaveSchedule} className="space-y-6">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1">Office Start Time</label>
@@ -281,15 +294,46 @@ const CompanyDashboard = () => {
                 </button>
               </form>
             </div>
-
-          </div>
+           </div>
         )}
 
       </div>
+
+      {/* === CALENDAR MODAL === */}
+      {showCalendar && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl relative">
+            <button onClick={() => setShowCalendar(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+              <X size={24}/>
+            </button>
+            
+            <div className="mb-4">
+              <h2 className="text-xl font-bold text-slate-800">{selectedEmp?.name}</h2>
+              <p className="text-slate-500 text-sm">Attendance History</p>
+            </div>
+
+            <div className="calendar-container">
+              <Calendar 
+                tileClassName={getTileClassName}
+                className="w-full border-none shadow-none text-sm"
+              />
+            </div>
+
+            <div className="mt-4 flex gap-4 text-sm justify-center">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-green-100 border border-green-600 rounded"></div>
+                <span>Present</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 bg-orange-100 border border-orange-600 rounded"></div>
+                <span>Late</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default CompanyDashboard;
-
-
