@@ -267,8 +267,9 @@ def update_schedule(
     company = db.query(Company).filter(Company.id == current_user.company_id).first()
     if not company: raise HTTPException(404, "Company not found")
     
-    company.work_start_time = payload.start_time
-    company.work_end_time = payload.end_time
+# ✅ FIX: Use the correct field names from your Pydantic model
+    company.work_start_time = payload.work_start_time  # Was payload.start_time (Wrong)
+    company.work_end_time = payload.work_end_time      # Was payload.end_time (Wrong)
     db.commit()
     return {"status": "success", "message": "Work Schedule Updated"}
 
