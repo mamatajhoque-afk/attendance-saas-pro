@@ -51,7 +51,7 @@ const EmployeeDashboard = () => {
     }
   };
 
-  // ✅ HELPER: Format Date to "YYYY-MM-DD" to match Database
+  // ✅ HELPER: Format Date to "YYYY-MM-DD" to match Database exactly
   const formatDateKey = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -75,6 +75,7 @@ const EmployeeDashboard = () => {
 
     const thisMonthLogs = history.filter(log => {
       // Safe parsing of YYYY-MM-DD string
+      if (!log.date_only) return false;
       const [y, m, d] = log.date_only.split('-').map(Number);
       return (m - 1) === currentMonth && y === currentYear;
     });
@@ -98,11 +99,11 @@ const EmployeeDashboard = () => {
   // 🎨 [FIXED] Calendar Colors - Uses date_only for 100% accuracy
   const getTileClassName = ({ date, view }) => {
     if (view === 'month') {
-      const dateKey = formatDateKey(date); // "2026-02-02"
+      const dateKey = formatDateKey(date); // e.g. "2026-02-02"
       const today = new Date();
       today.setHours(0,0,0,0);
 
-      // 1. Check for Log (Present/Late)
+      // 1. Check for Log (Present/Late) using strict string match
       const log = history.find(l => l.date_only === dateKey);
       
       if (log) {
@@ -130,6 +131,7 @@ const EmployeeDashboard = () => {
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 font-sans">
       <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left Column: Profile */}
         <div className="space-y-6">
           <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 text-center">
             <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4 text-blue-600"><User size={32} /></div>
@@ -140,6 +142,7 @@ const EmployeeDashboard = () => {
           <button onClick={handleLogout} className="w-full flex items-center justify-center gap-2 text-red-500 font-bold p-4 hover:bg-red-50 rounded-xl transition border border-transparent hover:border-red-100 bg-white shadow-sm"><LogOut size={18}/> Logout</button>
         </div>
 
+        {/* Right Column: Calendar & Details */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200">
             <div className="flex justify-between items-center mb-6">
