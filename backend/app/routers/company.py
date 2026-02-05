@@ -9,7 +9,7 @@ from app.core.security import get_password_hash
 from app.routers.auth import get_current_active_admin
 from app.schemas.schemas import (
     EmployeeCreate, EmployeeUpdate, ManualAttendance, 
-    EmergencyOpen, TokenData, EmployeeResponse
+    EmergencyOpen, TokenData, EmployeeResponse, TokenData, OfficeSettings
 )
 
 # ✅ ADD THIS CLASS (Schema)
@@ -247,18 +247,16 @@ def get_company_devices(
 # 10. UPDATE OFFICE GEOFENCE
 @router.post("/company/settings/location")
 def update_settings(
-    lat: str = Form(...), 
-    lng: str = Form(...), 
-    radius: str = Form(...),
+    payload: OfficeSettings,  # 👈 Expects JSON body now
     current_user: TokenData = Depends(get_current_active_admin),
     db: Session = Depends(get_db)
 ):
     company = db.query(Company).filter(Company.id == current_user.company_id).first()
     if not company: raise HTTPException(404, detail="Company not found")
     
-    company.office_lat = lat
-    company.office_lng = lng
-    company.office_radius = radius
+    company.office_lat = payload.lat
+    company.office_lng = payload.lng
+    company.office_radius = payload.radius
     db.commit()
     return {"status": "success", "message": "Office Location Updated"}
 
