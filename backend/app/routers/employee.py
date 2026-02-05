@@ -2,13 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime
 import pytz
-
+from app.db.models import Company
 from app.db.database import get_db
 from app.db.models import Employee, Attendance, DepartmentSession, LocationLog, Company
 from app.schemas.schemas import AttendanceMark, TrackingStart, LocationUpdate
 from app.routers.auth import oauth2_scheme
 from jose import jwt
 from app.core.config import settings
+
+from typing import List
+from pydantic import BaseModel
 
 router = APIRouter()
 dhaka_zone = pytz.timezone('Asia/Dhaka')
@@ -22,6 +25,13 @@ def get_current_employee(token: str = Depends(oauth2_scheme)):
         return payload  # ✅ Returns a DICT (e.g., {"sub": "EMP01", "role": "employee"})
     except:
         raise HTTPException(status_code=401, detail="Invalid Credentials")
+    
+# ✅ 1. Define the Schema for the response
+class AttendanceHistoryItem(BaseModel):
+    date: str
+    status: str
+    check_in: str | None
+    check_out: str | None
 
 # 1. GET MY PROFILE
 @router.get("/api/me")
@@ -138,6 +148,23 @@ def update_location(payload: LocationUpdate, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "success"}
 
+@router.get("/api/office_config")
+def get_office_config(
+    db: Session = Depends(get_db), 
+    user: dict = Depends(get_current_employee)
+):
+    # 1. Find the company of the logged-in user
+    company = db.query(Company).filter(Company.id == user["company_id"]).first()
+    
+    if not company:
+        return {"lat": 0.0, "lng": 0.0, "radius": 50}
+        
+    return {
+        "lat": float(company.office_lat) if company.office_lat else 0.0,
+        "lng": float(company.office_lng) if company.office_lng else 0.0,
+        "radius": float(company.office_radius) if company.office_radius else 50.0
+    }
+
 # 5. LIVE MAP 
 @router.get("/company/tracking/live")
 def get_live_map(db: Session = Depends(get_db)):
@@ -155,3 +182,48 @@ def get_my_attendance(
     ).order_by(Attendance.timestamp.desc()).limit(60).all()
     
     return logs
+
+# ✅ 2. Add this new API Endpoint
+@router.get("/api/history", response_model=List[AttendanceHistoryItem])
+def get_my_history(
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_employee)
+):
+    # Get last 60 days of attendance
+    history = db.query(Attendance).filter(
+        Attendance.employee_id == user["sub"]
+    ).order_by(Attendance.date_only.desc()).limit(60).all()
+    
+    results = []
+    for record in history:
+        results.append({
+            "date": record.date_only.strftime("%Y-%m-%d"),
+            "status": record.status,
+            "check_in": record.check_in_time.strftime("%H:%M") if record.check_in_time else None,
+            "check_out": record.check_out_time.strftime("%H:%M") if record.check_out_time else None,
+        })
+        
+    return results
+
+# In backend/app/routers/employee.py
+
+@router.get("/api/office_config")
+def get_office_config(
+    db: Session = Depends(get_db), 
+    user: dict = Depends(get_current_employee)
+):
+    company = db.query(Company).filter(Company.id == user["company_id"]).first()
+    
+    if not company:
+        return {
+            "lat": 0.0, "lng": 0.0, "radius": 50,
+            "start_time": "09:00", "end_time": "17:00" # Defaults
+        }
+        
+    return {
+        "lat": float(company.office_lat) if company.office_lat else 0.0,
+        "lng": float(company.office_lng) if company.office_lng else 0.0,
+        "radius": float(company.office_radius) if company.office_radius else 50.0,
+        "start_time": company.work_start_time, # ✅ SEND START TIME
+        "end_time": company.work_end_time      # ✅ SEND END TIME
+    }
