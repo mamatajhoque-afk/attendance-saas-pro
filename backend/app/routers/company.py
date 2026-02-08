@@ -4,12 +4,12 @@ from datetime import datetime
 from pydantic import BaseModel, validator
 import re
 from app.db.database import get_db
-from app.db.models import Employee, Attendance, HardwareDevice, DoorEvent, LocationLog, Company
+from app.db.models import Employee, Attendance, HardwareDevice, DoorEvent, LocationLog, Company, DepartmentSession
 from app.core.security import get_password_hash
 from app.routers.auth import get_current_active_admin
 from app.schemas.schemas import (
     EmployeeCreate, EmployeeUpdate, ManualAttendance, 
-    EmergencyOpen, TokenData, EmployeeResponse
+    EmergencyOpen, TokenData, EmployeeResponse, TokenData, OfficeSettings
 )
 
 # ✅ ADD THIS CLASS (Schema)
@@ -131,22 +131,26 @@ def get_employee_history(
         Attendance.employee_id == employee.employee_id 
     ).order_by(Attendance.timestamp.desc()).limit(50).all()
 
-# 6. LIVE TRACKING
+# 6. LIVE TRACKING (✅ FIXED)
 @router.get("/company/tracking/live")
 def get_live_tracking(
     current_user: TokenData = Depends(get_current_active_admin),
     db: Session = Depends(get_db)
 ):
+    # 1. Get all Marketing Employees in this company
     employees = db.query(Employee).filter(
         Employee.company_id == current_user.company_id,
-        Employee.role.ilike("%Marketing%")
+        Employee.role.ilike("%Marketing%")  # Case-insensitive check
     ).all()
     
     live_data = []
+    
     for emp in employees:
-        last_loc = db.query(LocationLog).filter(
-            LocationLog.employee_id == emp.id
-        ).order_by(LocationLog.timestamp.desc()).first()
+        # 2. Find the LATEST location by joining DepartmentSession
+        # Logic: LocationLog -> DepartmentSession -> Employee
+        last_loc = db.query(LocationLog).join(DepartmentSession).filter(
+            DepartmentSession.employee_id == emp.id
+        ).order_by(LocationLog.recorded_at.desc()).first() # ✅ Fixed: "recorded_at"
         
         if last_loc:
             live_data.append({
@@ -155,8 +159,9 @@ def get_live_tracking(
                 "role": emp.role,
                 "lat": last_loc.latitude,
                 "lon": last_loc.longitude,
-                "last_seen": last_loc.timestamp
+                "last_seen": last_loc.recorded_at # ✅ Fixed: "recorded_at"
             })
+            
     return live_data
 
 # 7. MANUAL ATTENDANCE (✅ FIXED)
@@ -242,18 +247,16 @@ def get_company_devices(
 # 10. UPDATE OFFICE GEOFENCE
 @router.post("/company/settings/location")
 def update_settings(
-    lat: str = Form(...), 
-    lng: str = Form(...), 
-    radius: str = Form(...),
+    payload: OfficeSettings,  # 👈 Expects JSON body now
     current_user: TokenData = Depends(get_current_active_admin),
     db: Session = Depends(get_db)
 ):
     company = db.query(Company).filter(Company.id == current_user.company_id).first()
     if not company: raise HTTPException(404, detail="Company not found")
     
-    company.office_lat = lat
-    company.office_lng = lng
-    company.office_radius = radius
+    company.office_lat = payload.lat
+    company.office_lng = payload.lng
+    company.office_radius = payload.radius
     db.commit()
     return {"status": "success", "message": "Office Location Updated"}
 

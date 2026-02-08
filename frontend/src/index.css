@@ -16,3 +16,25 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+/* Custom Calendar Overrides */
+.react-calendar {
+  width: 100% !important;
+  border: none !important;
+  background: transparent !important;
+}
+.react-calendar__tile {
+  padding: 1rem 0 !important;
+  border-radius: 8px !important;
+}
+.react-calendar__tile:enabled:hover,
+.react-calendar__tile:enabled:focus {
+  background-color: #f1f5f9 !important;
+}
+.react-calendar__tile--now {
+  background: #eff6ff !important;
+  color: #2563eb !important;
+}
+.react-calendar__tile--active {
+  background: #2563eb !important;
+  color: white !important;
+}

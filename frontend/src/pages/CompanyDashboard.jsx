@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { companyService } from '../services/api';
 import toast from 'react-hot-toast';
 import { useNavigate } from 'react-router-dom';
-import Calendar from 'react-calendar'; // 1. IMPORT CALENDAR
-import 'react-calendar/dist/Calendar.css'; // 1. IMPORT CSS
+import Calendar from 'react-calendar';
+import 'react-calendar/dist/Calendar.css';
 import { 
   Building2, Users, MapPin, History, LogOut, 
-  Trash2, Power, UserCheck, ShieldAlert, Fingerprint, Lock, Settings, Clock, X
+  Trash2, Power, UserCheck, ShieldAlert, Fingerprint, Lock, Settings, Clock, X, Crosshair
 } from 'lucide-react';
 
 const CompanyDashboard = () => {
@@ -22,7 +22,7 @@ const CompanyDashboard = () => {
   const [settings, setSettings] = useState({ lat: '', lng: '', radius: '50' });
   const [schedule, setSchedule] = useState({ start: '09:00', end: '17:00' });
 
-  // [NEW] Calendar State
+  // Calendar State
   const [showCalendar, setShowCalendar] = useState(false);
   const [selectedEmp, setSelectedEmp] = useState(null);
   const [attendanceHistory, setAttendanceHistory] = useState([]);
@@ -32,15 +32,45 @@ const CompanyDashboard = () => {
   useEffect(() => {
     loadEmployees();
     loadDevices(); 
+    // You might want to load existing settings here if your API supports GET settings
   }, []);
 
-  // --- EXISTING FUNCTIONS ---
+  // --- FUNCTIONS ---
+
   const handleSaveSchedule = async (e) => {
     e.preventDefault();
     try {
       await companyService.updateSchedule(schedule.start, schedule.end);
       toast.success("Work Schedule Updated 🕒");
     } catch (err) { toast.error("Failed to update schedule"); }
+  };
+
+  // ✅ NEW: Save Location Function
+  const handleSaveLocation = async (e) => {
+    e.preventDefault();
+    try {
+      await companyService.updateLocation(settings.lat, settings.lng, settings.radius);
+      toast.success("Office Location Updated 📍");
+    } catch (err) { toast.error("Failed to update location"); }
+  };
+
+  // ✅ NEW: Auto-Detect Location Helper
+  const handleGetLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported by your browser");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setSettings({
+          ...settings,
+          lat: position.coords.latitude.toString(),
+          lng: position.coords.longitude.toString()
+        });
+        toast.success("Location Fetched!");
+      },
+      () => toast.error("Unable to retrieve your location")
+    );
   };
 
   const loadEmployees = async () => {
@@ -106,12 +136,12 @@ const CompanyDashboard = () => {
     } catch (err) { toast.error("Command Failed"); }
   };
 
-  // --- [NEW] CALENDAR FUNCTIONS ---
+  // --- CALENDAR FUNCTIONS ---
   
   const openHistory = async (emp) => {
     setSelectedEmp(emp);
     setShowCalendar(true);
-    setAttendanceHistory([]); // Clear previous
+    setAttendanceHistory([]); 
     try {
       const res = await companyService.getEmployeeHistory(emp.employee_id);
       setAttendanceHistory(res.data);
@@ -120,10 +150,8 @@ const CompanyDashboard = () => {
     }
   };
 
-  // This function decides the color of each date tile
   const getTileClassName = ({ date, view }) => {
     if (view === 'month') {
-      // Find logs for this specific date
       const dayLogs = attendanceHistory.filter(log => {
         const logDate = new Date(log.timestamp);
         return logDate.getDate() === date.getDate() &&
@@ -132,7 +160,6 @@ const CompanyDashboard = () => {
       });
 
       if (dayLogs.length > 0) {
-        // Check if any log is marked "Late"
         const isLate = dayLogs.some(log => log.status === 'Late');
         return isLate ? 'bg-orange-100 text-orange-600 font-bold' : 'bg-green-100 text-green-600 font-bold';
       }
@@ -207,17 +234,14 @@ const CompanyDashboard = () => {
                         </span>
                       </td>
                       <td className="p-3 text-right flex justify-end gap-2">
-                        {/* HISTORY BUTTON */}
                         <button onClick={() => openHistory(emp)} className="p-2 rounded text-blue-600 bg-blue-50 hover:bg-blue-100" title="View Calendar">
                           <History size={16}/>
                         </button>
-                        {/* SUSPEND BUTTON */}
                         <button onClick={() => handleToggleStatus(emp)} 
                           title={emp.status === 'suspended' ? "Activate" : "Suspend"}
                           className={`p-2 rounded ${emp.status === 'suspended' ? 'text-green-600 bg-green-50' : 'text-amber-600 bg-amber-50'}`}>
                           {emp.status === 'suspended' ? <UserCheck size={16}/> : <Power size={16}/>}
                         </button>
-                        {/* DELETE BUTTON */}
                         <button onClick={() => handleDelete(emp.id)} className="p-2 rounded text-red-600 bg-red-50 hover:bg-red-100">
                           <Trash2 size={16}/>
                         </button>
@@ -230,7 +254,7 @@ const CompanyDashboard = () => {
           </div>
         )}
 
-        {/* === TAB 2 & 3 (Keeping them the same) === */}
+        {/* === TAB 2: CONTROL CENTER === */}
         {activeTab === 'control' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
@@ -272,8 +296,11 @@ const CompanyDashboard = () => {
           </div>
         )}
 
+        {/* === TAB 3: SETTINGS (✅ UPDATED WITH LOCATION) === */}
         {activeTab === 'settings' && (
            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+             
+             {/* 1. SCHEDULE CARD */}
              <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 h-fit">
               <h2 className="font-bold text-xl mb-6 flex items-center gap-2 text-slate-800">
                 <Clock className="text-blue-500"/> Work Schedule
@@ -294,6 +321,43 @@ const CompanyDashboard = () => {
                 </button>
               </form>
             </div>
+
+            {/* 2. ✅ NEW: LOCATION CARD */}
+            <div className="bg-white p-8 rounded-xl shadow-sm border border-slate-200 h-fit">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="font-bold text-xl flex items-center gap-2 text-slate-800">
+                  <MapPin className="text-red-500"/> Office Location
+                </h2>
+                <button type="button" onClick={handleGetLocation} className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1 rounded-full flex items-center gap-1 font-bold">
+                  <Crosshair size={14}/> Get Current
+                </button>
+              </div>
+              
+              <form onSubmit={handleSaveLocation} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Latitude</label>
+                    <input type="text" className="w-full border p-2 rounded bg-slate-50"
+                      value={settings.lat} onChange={e => setSettings({...settings, lat: e.target.value})} required />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-500 mb-1 uppercase">Longitude</label>
+                    <input type="text" className="w-full border p-2 rounded bg-slate-50"
+                      value={settings.lng} onChange={e => setSettings({...settings, lng: e.target.value})} required />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-1">Geofence Radius (Meters)</label>
+                  <input type="number" className="w-full border p-2 rounded"
+                    value={settings.radius} onChange={e => setSettings({...settings, radius: e.target.value})} required />
+                  <p className="text-xs text-slate-400 mt-1">Distance allowed from center point.</p>
+                </div>
+                <button className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded">
+                  Update Location
+                </button>
+              </form>
+            </div>
+
            </div>
         )}
 

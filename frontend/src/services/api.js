@@ -92,6 +92,15 @@ export const companyService = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
+
+  // ✅ FIXED: Renamed to match Dashboard & sends JSON to match Backend
+  updateLocation: (lat, lng, radius) => {
+    return api.post('/company/settings/location', { 
+      lat: lat, 
+      lng: lng, 
+      radius: radius 
+    });
+  },
   // Schedule function
   updateSchedule: (startTime, endTime) => api.post('/company/settings/schedule', {
     work_start_time: startTime,
@@ -102,6 +111,7 @@ export const companyService = {
 
 export const employeeService = {
   getProfile: () => api.get('/api/me'),
+  getHistory: () => api.get('/api/me/attendance'),
   markAttendance: (id, location) => api.post('/api/mark_attendance', {
     employee_id: id,
     location: location
