@@ -118,5 +118,6 @@ def login_employee(payload: LoginRequest, db: Session = Depends(get_db)):
         "status": "success", 
         "access_token": token, 
         "name": user.name, 
-        "company_id": user.company_id
+        "company_id": user.company_id,
+        "department": user.department
     }
