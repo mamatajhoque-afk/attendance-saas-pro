@@ -16,34 +16,6 @@ from pydantic import BaseModel
 router = APIRouter()
 dhaka_zone = pytz.timezone('Asia/Dhaka')
 
-# 1. Define the input schema
-class ExcuseRequest(BaseModel):
-    reason: str
-
-
-# 2. Add the endpoint
-@router.post("/api/submit_excuse")
-def submit_excuse(
-    payload: ExcuseRequest,
-    db: Session = Depends(get_db),
-    user: dict = Depends(get_current_employee)
-):
-    # Find today's attendance for this user
-    today = datetime.now(dhaka_zone).date()
-    attendance = db.query(Attendance).filter(
-        Attendance.employee_id == user["sub"],
-        Attendance.date_only == today
-    ).first()
-
-    if not attendance:
-        return {"status": "error", "message": "No attendance found for today"}
-
-    # Save the reason
-    attendance.late_reason = payload.reason
-    db.commit()
-    
-    return {"status": "success", "message": "Reason recorded"}
-
 # --- HELPER: Verify Employee Token ---
 def get_current_employee(token: str = Depends(oauth2_scheme)):
     try:

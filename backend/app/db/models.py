@@ -60,7 +60,7 @@ class Employee(Base):
     # Security Features
     device_id = Column(String, nullable=True) 
     role = Column(String, default="normal") 
-    department = Column(String, default="General")
+    
     company = relationship("Company", back_populates="employees")
     tracking_sessions = relationship("DepartmentSession", back_populates="employee")
 
@@ -116,7 +116,7 @@ class Attendance(Base):
     type = Column(String, nullable=True)       # 'check_in' or 'check_out'
     method = Column(String, nullable=True)     # 'MANUAL_ADMIN', 'GPS', etc.
     image_url = Column(String, nullable=True)  # Used for notes
-    late_reason = Column(String, nullable=True)
+
 class HardwareDevice(Base):
     __tablename__ = "hardware_devices"
     id = Column(Integer, primary_key=True)
