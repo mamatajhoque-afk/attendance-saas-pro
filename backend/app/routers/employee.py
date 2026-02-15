@@ -8,12 +8,29 @@ from jose import jwt
 
 from app.db.models import Company, Employee, Attendance, DepartmentSession, LocationLog, ShortLeave
 from app.db.database import get_db
-# ✅ Added SubmitExcuse
-from app.schemas.schemas import AttendanceMark, TrackingStart, LocationUpdate, EmergencyCheckout, ShortLeaveRequest, SubmitExcuse
+from app.schemas.schemas import AttendanceMark, TrackingStart, LocationUpdate, EmergencyCheckout, ShortLeaveRequest
 from app.routers.auth import oauth2_scheme
 from app.core.config import settings
 
 router = APIRouter()
+
+# --- LOCAL SCHEMAS (Ensures strict payload handling) ---
+class SubmitExcuseLocal(BaseModel):
+    reason: str
+    employee_id: Optional[str] = None
+
+class AttendanceHistoryItem(BaseModel):
+    date: str
+    status: str
+    check_in: Optional[str] = None
+    check_out: Optional[str] = None
+    check_in_time: Optional[str] = None
+    door_unlock_time: Optional[str] = None
+    check_out_time: Optional[str] = None
+    late_reason: Optional[str] = None 
+
+class EmployeeActionPayload(BaseModel):
+    employee_id: str
 
 # --- HELPER: Get Company Local Time ---
 def get_local_now(company: Company) -> datetime:
@@ -22,6 +39,7 @@ def get_local_now(company: Company) -> datetime:
         tz = pytz.timezone(tz_str)
     except Exception:
         tz = pytz.UTC
+    # Strip tzinfo so PostgreSQL saves it exactly as the naive local time (e.g., 09:00 Dhaka time)
     return datetime.now(tz).replace(tzinfo=None)
 
 def get_current_employee(token: str = Depends(oauth2_scheme)):
@@ -32,20 +50,6 @@ def get_current_employee(token: str = Depends(oauth2_scheme)):
         return payload  
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid Credentials")
-    
-# --- SCHEMAS ---
-class AttendanceHistoryItem(BaseModel):
-    date: str
-    status: str
-    check_in: Optional[str] = None
-    check_out: Optional[str] = None
-    check_in_time: Optional[str] = None
-    door_unlock_time: Optional[str] = None
-    check_out_time: Optional[str] = None
-    late_reason: Optional[str] = None  # ✅ Added late_reason to history
-
-class EmployeeActionPayload(BaseModel):
-    employee_id: str
 
 
 @router.get("/api/me")
@@ -102,6 +106,8 @@ def mark_attendance(
                 start_datetime = datetime.combine(today, start_dt)
                 
                 threshold_minutes = getattr(company, 'super_late_threshold', 30)
+                if threshold_minutes is None: threshold_minutes = 30
+                
                 super_late_datetime = start_datetime + timedelta(minutes=threshold_minutes)
                 
                 if now > super_late_datetime:
@@ -224,28 +230,37 @@ def emergency_checkout(
     db.commit()
     return {"status": "success", "message": "Emergency checkout recorded"}
 
-# ✅ LATE EXCUSE ENDPOINT (Improvement 1)
+# ✅ FIXED LATE REASON ENDPOINT
 @router.post("/api/submit_excuse")
 def submit_excuse(
-    payload: SubmitExcuse,
+    payload: SubmitExcuseLocal,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_employee)
 ):
+    emp_id = payload.employee_id or user.get("sub")
     company = db.query(Company).filter(Company.id == user["company_id"]).first()
     now = get_local_now(company)
     today = now.date()
     
+    # 1. Try to find today's attendance
     att = db.query(Attendance).filter(
-        Attendance.employee_id == user["sub"],
+        Attendance.employee_id == emp_id,
         Attendance.date_only == today
     ).first()
     
+    # 2. Fallback if midnight crossed between check-in and excuse submission
     if not att:
-        raise HTTPException(404, "No attendance record found for today")
+        att = db.query(Attendance).filter(
+            Attendance.employee_id == emp_id
+        ).order_by(Attendance.timestamp.desc()).first()
         
+        if not att:
+            raise HTTPException(404, "No attendance record found to attach reason")
+            
     att.late_reason = payload.reason
     db.commit()
-    return {"status": "success", "message": "Late reason submitted"}
+    return {"status": "success", "message": "Late reason submitted and saved!"}
+
 
 @router.post("/api/short_leave/request")
 def request_short_leave(
@@ -395,7 +410,7 @@ def get_my_history(
             "check_in_time": record.check_in_time.isoformat() if record.check_in_time else None,
             "door_unlock_time": record.door_unlock_time.isoformat() if getattr(record, 'door_unlock_time', None) else None,
             "check_out_time": record.check_out_time.isoformat() if record.check_out_time else None,
-            "late_reason": getattr(record, 'late_reason', None) # ✅ Expose late_reason
+            "late_reason": getattr(record, 'late_reason', None) 
         })
         
     return results
