@@ -1,61 +1,64 @@
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy.orm import Session
 from datetime import datetime
-import pytz
-from typing import List, Optional
-from jose import jwt
-from passlib.context import CryptContext
+from pydantic import BaseModel, validator
+import re
 
-from app.db.models import Company, CompanyAdmin, Employee, Attendance, HardwareDevice, DoorEvent, ShortLeave, DepartmentSession, LocationLog
 from app.db.database import get_db
-from app.schemas.schemas import EmployeeCreate, EmployeeUpdate, ManualAttendance, ScheduleUpdate
-from app.routers.auth import oauth2_scheme
-from app.core.config import settings
+from app.db.models import Employee, Attendance, HardwareDevice, DoorEvent, LocationLog, Company, DepartmentSession, ShortLeave, CompanyAdmin
+from app.core.security import get_password_hash
+from app.routers.auth import get_current_active_admin
+from app.schemas.schemas import (
+    EmployeeCreate, EmployeeUpdate, ManualAttendance, 
+    EmergencyOpen, TokenData, OfficeSettings
+)
+
+# ✅ UPDATED: Include Step 0 and Step 4 timezone/threshold fields
+class ScheduleUpdate(BaseModel):
+    work_start_time: str
+    work_end_time: str
+    timezone: str = "UTC"
+    super_late_threshold: int = 30
+
+    @validator("work_start_time", "work_end_time")
+    def validate_time(cls, v):
+        if not re.match(r"^\d{2}:\d{2}$", v):
+            raise ValueError("Time must be in HH:MM format")
+        return v
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
-# --- HELPER: Verify Admin Token ---
-def get_current_company_admin(token: str = Depends(oauth2_scheme)):
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        if payload.get("role") != "company_admin": 
-            raise HTTPException(status_code=403, detail="Not authorized")
-        return payload  
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid Credentials")
+# ==========================================
+# 🛡️ SAFETY NET: JWT PAYLOAD FALLBACK
+# ==========================================
+def get_safe_company_id(current_user: TokenData, db: Session) -> int:
+    """Ensures we always have a company_id, even if the token generation missed it."""
+    if current_user.company_id:
+        return current_user.company_id
+        
+    admin = db.query(CompanyAdmin).filter(CompanyAdmin.username == current_user.username).first()
+    if not admin:
+        raise HTTPException(401, "Admin not found in Database")
+    return admin.company_id
 
-# --- 1. EMPLOYEE MANAGEMENT ---
 
-@router.post("/company/employees")
-def add_employee(
-    payload: EmployeeCreate, 
-    db: Session = Depends(get_db), 
-    admin: dict = Depends(get_current_company_admin)
-):
-    existing = db.query(Employee).filter(
-        Employee.employee_id == payload.employee_id, 
-        Employee.company_id == admin["company_id"]
-    ).first()
-    if existing:
-        raise HTTPException(400, "Employee ID already exists")
-
-    hashed_pw = pwd_context.hash(payload.password)
-    new_emp = Employee(
-        company_id=admin["company_id"],
-        employee_id=payload.employee_id,
-        name=payload.name,
-        password_hash=hashed_pw,
-        role=payload.role,
-        status="active"
-    )
-    db.add(new_emp)
-    db.commit()
-    return {"status": "success", "message": "Employee added"}
+# ==========================================
+# 1. EMPLOYEE MANAGEMENT
+# ==========================================
 
 @router.get("/company/employees")
-def get_employees(db: Session = Depends(get_db), admin: dict = Depends(get_current_company_admin)):
-    emps = db.query(Employee).filter(Employee.company_id == admin["company_id"]).all()
+def get_employees(
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    company_id = get_safe_company_id(current_user, db)
+    
+    emps = db.query(Employee).filter(
+        Employee.company_id == company_id,
+        Employee.deleted_at.is_(None)
+    ).all()
+    
+    # ✅ FIX: Returning dict ensures ALL fields (status, deleted_at) reach React properly
     return [
         {
             "id": e.id,
@@ -67,77 +70,100 @@ def get_employees(db: Session = Depends(get_db), admin: dict = Depends(get_curre
         } for e in emps
     ]
 
-@router.put("/company/employees/{db_id}")
-def update_employee(
-    db_id: int, 
-    payload: EmployeeUpdate, 
-    db: Session = Depends(get_db), 
-    admin: dict = Depends(get_current_company_admin)
+@router.post("/company/employees")
+def add_employee(
+    payload: EmployeeCreate,
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
 ):
-    emp = db.query(Employee).filter(Employee.id == db_id, Employee.company_id == admin["company_id"]).first()
-    if not emp: raise HTTPException(404, "Employee not found")
+    company_id = get_safe_company_id(current_user, db)
     
-    if payload.name: emp.name = payload.name
-    if payload.role: emp.role = payload.role
+    exists = db.query(Employee).filter(
+        Employee.employee_id == payload.employee_id,
+        Employee.company_id == company_id
+    ).first()
+    
+    if exists:
+        if exists.deleted_at:
+            exists.deleted_at = None
+            exists.name = payload.name
+            exists.password_hash = get_password_hash(payload.password)
+            exists.role = payload.role
+            exists.status = "active"
+            db.commit()
+            return {"status": "success", "message": "Employee Restored"}
+        raise HTTPException(400, "Employee ID already exists")
+
+    new_emp = Employee(
+        employee_id=payload.employee_id,
+        name=payload.name,
+        password_hash=get_password_hash(payload.password),
+        role=payload.role,
+        company_id=company_id,
+        status="active"
+    )
+    db.add(new_emp)
+    db.commit()
+    return {"status": "success", "message": "Employee Added"}
+
+@router.put("/company/employees/{emp_db_id}")
+def update_employee(
+    emp_db_id: int, 
+    payload: EmployeeUpdate,
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    company_id = get_safe_company_id(current_user, db)
+    emp = db.query(Employee).filter(Employee.id == emp_db_id, Employee.company_id == company_id).first()
+    
+    if not emp: raise HTTPException(404, "Employee not found")
+
     if payload.status: emp.status = payload.status
+    if payload.role: emp.role = payload.role
+    if payload.name: emp.name = payload.name
     
     db.commit()
-    return {"status": "success"}
+    return {"status": "success", "message": "Employee updated"}
 
-@router.delete("/company/employees/{db_id}")
-def delete_employee(db_id: int, db: Session = Depends(get_db), admin: dict = Depends(get_current_company_admin)):
-    emp = db.query(Employee).filter(Employee.id == db_id, Employee.company_id == admin["company_id"]).first()
+@router.delete("/company/employees/{emp_db_id}")
+def delete_employee(
+    emp_db_id: int,
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    company_id = get_safe_company_id(current_user, db)
+    emp = db.query(Employee).filter(Employee.id == emp_db_id, Employee.company_id == company_id).first()
+    
     if not emp: raise HTTPException(404, "Employee not found")
     
     emp.deleted_at = datetime.utcnow()
-    emp.status = "deleted"
     db.commit()
-    return {"status": "success"}
+    return {"status": "success", "message": "Employee deleted"}
 
-# --- 2. ATTENDANCE & TRACKING ---
 
-@router.post("/company/attendance/manual")
-def mark_manual_attendance(
-    payload: ManualAttendance, 
-    db: Session = Depends(get_db), 
-    admin: dict = Depends(get_current_company_admin)
+# ==========================================
+# 2. ATTENDANCE & TRACKING
+# ==========================================
+
+@router.get("/company/employees/{employee_id}/attendance")
+def get_employee_history(
+    employee_id: str, 
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
 ):
-    emp = db.query(Employee).filter(Employee.employee_id == payload.employee_id, Employee.company_id == admin["company_id"]).first()
-    if not emp: raise HTTPException(404, "Employee not found")
-
-    dt = payload.timestamp
-    today = dt.date()
+    company_id = get_safe_company_id(current_user, db)
     
-    att = db.query(Attendance).filter(Attendance.employee_id == emp.employee_id, Attendance.date_only == today).first()
+    employee = db.query(Employee).filter(
+        Employee.employee_id == employee_id,
+        Employee.company_id == company_id
+    ).first()
     
-    if payload.type == "check_in":
-        if att: raise HTTPException(400, "Already checked in")
-        new_att = Attendance(
-            company_id=admin["company_id"],
-            employee_id=emp.employee_id,
-            timestamp=dt,
-            date_only=today,
-            status="Present", 
-            check_in_time=dt,
-            source="MANUAL_ADMIN",
-            type="check_in"
-        )
-        db.add(new_att)
-    else:
-        if not att: raise HTTPException(400, "No check in found for today")
-        att.check_out_time = dt
-        att.type = "check_out"
+    if not employee: raise HTTPException(404, "Employee not found")
         
-    db.commit()
-    return {"status": "success"}
-
-@router.get("/company/employees/{emp_id}/attendance")
-def get_employee_history(emp_id: str, db: Session = Depends(get_db), admin: dict = Depends(get_current_company_admin)):
     logs = db.query(Attendance).filter(
-        Attendance.employee_id == emp_id,
-        Attendance.company_id == admin["company_id"]
-    ).order_by(Attendance.date_only.desc()).all()
-    
+        Attendance.employee_id == employee.employee_id 
+    ).order_by(Attendance.timestamp.desc()).limit(50).all()
+
     return [
         {
             "date_only": log.date_only.strftime("%Y-%m-%d"),
@@ -150,74 +176,156 @@ def get_employee_history(emp_id: str, db: Session = Depends(get_db), admin: dict
         } for log in logs
     ]
 
-# --- 3. DEVICES & DOORS ---
+@router.get("/company/tracking/live")
+def get_live_tracking(
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    company_id = get_safe_company_id(current_user, db)
+    employees = db.query(Employee).filter(
+        Employee.company_id == company_id,
+        Employee.role.ilike("%Marketing%") 
+    ).all()
+    
+    live_data = []
+    for emp in employees:
+        last_loc = db.query(LocationLog).join(DepartmentSession).filter(
+            DepartmentSession.employee_id == emp.id
+        ).order_by(LocationLog.recorded_at.desc()).first() 
+        
+        if last_loc:
+            live_data.append({
+                "id": emp.employee_id,
+                "name": emp.name,
+                "role": emp.role,
+                "lat": last_loc.latitude,
+                "lon": last_loc.longitude,
+                "last_seen": last_loc.recorded_at 
+            })
+            
+    return live_data
+
+@router.post("/company/attendance/manual")
+def mark_manual_attendance(
+    payload: ManualAttendance,
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    company_id = get_safe_company_id(current_user, db)
+    emp = db.query(Employee).filter(
+        Employee.employee_id == payload.employee_id,
+        Employee.company_id == company_id
+    ).first()
+    
+    if not emp: raise HTTPException(404, "Employee not found")
+    
+    record_time = payload.timestamp
+    record_date = record_time.date()
+    status = "Present"
+
+    if payload.type == 'check_in':
+        company = db.query(Company).filter(Company.id == company_id).first()
+        if company and company.work_start_time:
+            work_start = datetime.strptime(company.work_start_time, "%H:%M").time()
+            if record_time.time() > work_start:
+                status = "Late"
+
+    new_log = Attendance(
+        company_id=company_id,
+        employee_id=emp.employee_id,
+        timestamp=record_time,
+        date_only=record_date,
+        status=status, 
+        type=payload.type,
+        check_in_time=record_time if payload.type == 'check_in' else None,
+        check_out_time=record_time if payload.type == 'check_out' else None,
+        method="MANUAL_ADMIN",
+        image_url=payload.notes 
+    )
+    db.add(new_log)
+    db.commit()
+    return {"status": "success", "message": f"Attendance marked ({status})"}
+
+
+# ==========================================
+# 3. DEVICES & SETTINGS
+# ==========================================
 
 @router.get("/company/devices")
-def get_devices(db: Session = Depends(get_db), admin: dict = Depends(get_current_company_admin)):
-    devices = db.query(HardwareDevice).filter(HardwareDevice.company_id == admin["company_id"]).all()
-    return [{"id": d.id, "device_uid": d.device_uid, "device_type": d.device_type} for d in devices]
+def get_company_devices(
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    company_id = get_safe_company_id(current_user, db)
+    return db.query(HardwareDevice).filter(HardwareDevice.company_id == company_id).all()
 
 @router.post("/company/devices/emergency-open")
-def emergency_open_door(
-    payload: dict,
-    db: Session = Depends(get_db), 
-    admin: dict = Depends(get_current_company_admin)
+def emergency_open(
+    payload: EmergencyOpen,
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
 ):
-    device_id = payload.get("device_id")
-    reason = payload.get("reason", "Admin Emergency Open")
+    company_id = get_safe_company_id(current_user, db)
+    device = db.query(HardwareDevice).filter(
+        HardwareDevice.id == payload.device_id, HardwareDevice.company_id == company_id
+    ).first()
+    
+    if not device: raise HTTPException(404, "Device not found")
     
     db.add(DoorEvent(
-        company_id=admin["company_id"],
-        event_type="EMERGENCY_UNLOCK",
-        trigger_reason=reason,
-        device_id=str(device_id)
+        company_id=company_id,
+        device_id=str(device.id),
+        event_type="EMERGENCY_OPEN",
+        trigger_reason=f"Opened by Admin: {payload.reason}",
+        created_at=datetime.utcnow()
     ))
     db.commit()
-    return {"status": "success"}
-
-# --- 4. SETTINGS ---
+    return {"status": "success", "message": "Door Unlock Command Sent"}
 
 @router.post("/company/settings/location")
-def update_location(
-    lat: str = Form(...), 
-    lng: str = Form(...), 
-    radius: str = Form(...),
-    db: Session = Depends(get_db), 
-    admin: dict = Depends(get_current_company_admin)
+def update_settings(
+    payload: OfficeSettings, 
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
 ):
-    comp = db.query(Company).filter(Company.id == admin["company_id"]).first()
-    comp.office_lat = lat
-    comp.office_lng = lng
-    comp.office_radius = radius
+    company_id = get_safe_company_id(current_user, db)
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company: raise HTTPException(404, detail="Company not found")
+    
+    company.office_lat = payload.lat
+    company.office_lng = payload.lng
+    company.office_radius = payload.radius
     db.commit()
-    return {"status": "success"}
+    return {"status": "success", "message": "Office Location Updated"}
 
 @router.post("/company/settings/schedule")
 def update_schedule(
     payload: ScheduleUpdate,
-    db: Session = Depends(get_db), 
-    admin: dict = Depends(get_current_company_admin)
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
 ):
-    comp = db.query(Company).filter(Company.id == admin["company_id"]).first()
-    comp.work_start_time = payload.start_time
-    comp.work_end_time = payload.end_time
+    company_id = get_safe_company_id(current_user, db)
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company: raise HTTPException(404, "Company not found")
     
-    # Extract extra fields if present
-    extra_data = payload.dict()
-    if "timezone" in extra_data:
-        comp.timezone = extra_data["timezone"]
-    if "super_late_threshold" in extra_data:
-        comp.super_late_threshold = extra_data["super_late_threshold"]
-        
+    company.work_start_time = payload.work_start_time 
+    company.work_end_time = payload.work_end_time     
+    company.timezone = payload.timezone
+    company.super_late_threshold = payload.super_late_threshold
+    
     db.commit()
-    return {"status": "success"}
+    return {"status": "success", "message": "Work Schedule Updated"}
 
-# ✅ --- 5. FULL AUDIT ENDPOINTS (STEP 5) ---
+
+# ==========================================
+# ✅ 4. FULL AUDIT ENDPOINTS (STEP 5 INCLUDED)
+# ==========================================
 
 @router.get("/company/audit/attendance")
-def get_all_attendance(db: Session = Depends(get_db), admin: dict = Depends(get_current_company_admin)):
+def get_all_attendance(db: Session = Depends(get_db), current_user: TokenData = Depends(get_current_active_admin)):
+    company_id = get_safe_company_id(current_user, db)
     logs = db.query(Attendance).filter(
-        Attendance.company_id == admin["company_id"]
+        Attendance.company_id == company_id
     ).order_by(Attendance.date_only.desc(), Attendance.timestamp.desc()).limit(500).all()
     
     return [
@@ -229,15 +337,16 @@ def get_all_attendance(db: Session = Depends(get_db), admin: dict = Depends(get_
             "check_in_time": log.check_in_time.isoformat() if log.check_in_time else None,
             "door_unlock_time": log.door_unlock_time.isoformat() if getattr(log, 'door_unlock_time', None) else None,
             "check_out_time": log.check_out_time.isoformat() if log.check_out_time else None,
-            "is_emergency_checkout": log.is_emergency_checkout,
-            "emergency_checkout_reason": log.emergency_checkout_reason
+            "is_emergency_checkout": getattr(log, 'is_emergency_checkout', False),
+            "emergency_checkout_reason": getattr(log, 'emergency_checkout_reason', None)
         } for log in logs
     ]
 
 @router.get("/company/audit/short_leaves")
-def get_all_short_leaves(db: Session = Depends(get_db), admin: dict = Depends(get_current_company_admin)):
+def get_all_short_leaves(db: Session = Depends(get_db), current_user: TokenData = Depends(get_current_active_admin)):
+    company_id = get_safe_company_id(current_user, db)
     leaves = db.query(ShortLeave).filter(
-        ShortLeave.company_id == admin["company_id"]
+        ShortLeave.company_id == company_id
     ).order_by(ShortLeave.exit_time.desc()).limit(500).all()
     
     return [
@@ -252,9 +361,10 @@ def get_all_short_leaves(db: Session = Depends(get_db), admin: dict = Depends(ge
     ]
 
 @router.get("/company/audit/door_events")
-def get_all_door_events(db: Session = Depends(get_db), admin: dict = Depends(get_current_company_admin)):
+def get_all_door_events(db: Session = Depends(get_db), current_user: TokenData = Depends(get_current_active_admin)):
+    company_id = get_safe_company_id(current_user, db)
     events = db.query(DoorEvent).filter(
-        DoorEvent.company_id == admin["company_id"]
+        DoorEvent.company_id == company_id
     ).order_by(DoorEvent.created_at.desc()).limit(500).all()
     
     return [
