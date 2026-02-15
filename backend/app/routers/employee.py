@@ -14,7 +14,7 @@ from app.core.config import settings
 
 router = APIRouter()
 
-# --- LOCAL SCHEMAS (Ensures strict payload handling) ---
+# --- LOCAL SCHEMAS ---
 class SubmitExcuseLocal(BaseModel):
     reason: str
     employee_id: Optional[str] = None
@@ -39,7 +39,7 @@ def get_local_now(company: Company) -> datetime:
         tz = pytz.timezone(tz_str)
     except Exception:
         tz = pytz.UTC
-    # Strip tzinfo so PostgreSQL saves it exactly as the naive local time (e.g., 09:00 Dhaka time)
+    # Strip tzinfo so PostgreSQL saves it exactly as the naive local time
     return datetime.now(tz).replace(tzinfo=None)
 
 def get_current_employee(token: str = Depends(oauth2_scheme)):
@@ -76,7 +76,7 @@ def get_my_profile(db: Session = Depends(get_db), user: dict = Depends(get_curre
             "status": att.status if att else "Absent",
             "checkIn": att.check_in_time.isoformat() if att and att.check_in_time else None,
             "checkOut": att.check_out_time.isoformat() if att and att.check_out_time else None,
-            "lateReason": att.late_reason if att and att.late_reason else None
+            "lateReason": att.late_reason if att and getattr(att, 'late_reason', None) else None
         }
     }
 
@@ -230,7 +230,7 @@ def emergency_checkout(
     db.commit()
     return {"status": "success", "message": "Emergency checkout recorded"}
 
-# ✅ FIXED LATE REASON ENDPOINT
+# ✅ FIXED: BULLETPROOF LATE REASON ENDPOINT
 @router.post("/api/submit_excuse")
 def submit_excuse(
     payload: SubmitExcuseLocal,
@@ -238,25 +238,15 @@ def submit_excuse(
     user: dict = Depends(get_current_employee)
 ):
     emp_id = payload.employee_id or user.get("sub")
-    company = db.query(Company).filter(Company.id == user["company_id"]).first()
-    now = get_local_now(company)
-    today = now.date()
     
-    # 1. Try to find today's attendance
+    # Grab the absolute latest attendance record for this exact employee
     att = db.query(Attendance).filter(
-        Attendance.employee_id == emp_id,
-        Attendance.date_only == today
-    ).first()
+        Attendance.employee_id == emp_id
+    ).order_by(Attendance.timestamp.desc()).first()
     
-    # 2. Fallback if midnight crossed between check-in and excuse submission
     if not att:
-        att = db.query(Attendance).filter(
-            Attendance.employee_id == emp_id
-        ).order_by(Attendance.timestamp.desc()).first()
+        raise HTTPException(404, "No attendance record found to attach reason")
         
-        if not att:
-            raise HTTPException(404, "No attendance record found to attach reason")
-            
     att.late_reason = payload.reason
     db.commit()
     return {"status": "success", "message": "Late reason submitted and saved!"}
