@@ -13,7 +13,6 @@ from app.schemas.schemas import (
     EmergencyOpen, TokenData, OfficeSettings
 )
 
-# ✅ UPDATED: Include Step 0 and Step 4 timezone/threshold fields
 class ScheduleUpdate(BaseModel):
     work_start_time: str
     work_end_time: str
@@ -32,7 +31,6 @@ router = APIRouter()
 # 🛡️ SAFETY NET: JWT PAYLOAD FALLBACK
 # ==========================================
 def get_safe_company_id(current_user: TokenData, db: Session) -> int:
-    """Ensures we always have a company_id, even if the token generation missed it."""
     if current_user.company_id:
         return current_user.company_id
         
@@ -58,7 +56,6 @@ def get_employees(
         Employee.deleted_at.is_(None)
     ).all()
     
-    # ✅ FIX: Returning dict ensures ALL fields (status, deleted_at) reach React properly
     return [
         {
             "id": e.id,
@@ -172,7 +169,8 @@ def get_employee_history(
             "check_in_time": log.check_in_time.isoformat() if log.check_in_time else None,
             "check_out_time": log.check_out_time.isoformat() if log.check_out_time else None,
             "is_emergency_checkout": log.is_emergency_checkout,
-            "emergency_checkout_reason": log.emergency_checkout_reason
+            "emergency_checkout_reason": log.emergency_checkout_reason,
+            "late_reason": getattr(log, 'late_reason', None) # ✅ Included Late Reason
         } for log in logs
     ]
 
@@ -318,7 +316,7 @@ def update_schedule(
 
 
 # ==========================================
-# ✅ 4. FULL AUDIT ENDPOINTS (STEP 5 INCLUDED)
+# 4. FULL AUDIT ENDPOINTS 
 # ==========================================
 
 @router.get("/company/audit/attendance")
@@ -338,7 +336,8 @@ def get_all_attendance(db: Session = Depends(get_db), current_user: TokenData = 
             "door_unlock_time": log.door_unlock_time.isoformat() if getattr(log, 'door_unlock_time', None) else None,
             "check_out_time": log.check_out_time.isoformat() if log.check_out_time else None,
             "is_emergency_checkout": getattr(log, 'is_emergency_checkout', False),
-            "emergency_checkout_reason": getattr(log, 'emergency_checkout_reason', None)
+            "emergency_checkout_reason": getattr(log, 'emergency_checkout_reason', None),
+            "late_reason": getattr(log, 'late_reason', None) # ✅ Included Late Reason
         } for log in logs
     ]
 

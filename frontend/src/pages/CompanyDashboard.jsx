@@ -27,10 +27,10 @@ const CompanyDashboard = () => {
   const [selectedEmp, setSelectedEmp] = useState(null);
   const [attendanceHistory, setAttendanceHistory] = useState([]);
 
-  // ✅ AUDIT STATE (STEP 5)
+  // AUDIT STATE 
   const [auditData, setAuditData] = useState({ attendance: [], shortLeaves: [], doorEvents: [] });
   const [auditSubTab, setAuditSubTab] = useState('attendance');
-  const [attFilter, setAttFilter] = useState('all'); // 'all', 'late', 'super_late', 'emergency'
+  const [attFilter, setAttFilter] = useState('all'); 
 
   const navigate = useNavigate();
 
@@ -39,14 +39,11 @@ const CompanyDashboard = () => {
     loadDevices(); 
   }, []);
 
-  // Fetch Audit Data when tab switches
   useEffect(() => {
     if (activeTab === 'audit') {
       loadAuditData();
     }
   }, [activeTab]);
-
-  // --- FUNCTIONS ---
 
   const loadAuditData = async () => {
     try {
@@ -162,8 +159,6 @@ const CompanyDashboard = () => {
     } catch (err) { toast.error("Command Failed"); }
   };
 
-  // --- CALENDAR FUNCTIONS ---
-  
   const openHistory = async (emp) => {
     setSelectedEmp(emp);
     setShowCalendar(true);
@@ -197,7 +192,6 @@ const CompanyDashboard = () => {
     return null;
   };
 
-  // --- RENDER HELPERS ---
   const formatTime = (isoString) => {
     if (!isoString) return '--:--';
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -207,12 +201,12 @@ const CompanyDashboard = () => {
     if (attFilter === 'late') return log.status === 'Late';
     if (attFilter === 'super_late') return log.status === 'Super Late';
     if (attFilter === 'emergency') return log.is_emergency_checkout === true;
-    return true; // 'all'
+    return true; 
   });
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans relative">
-      <div className="max-w-6xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         {/* HEADER */}
         <header className="flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
           <h1 className="text-2xl font-bold flex items-center gap-2 text-slate-800">
@@ -418,11 +412,9 @@ const CompanyDashboard = () => {
            </div>
         )}
 
-        {/* === TAB 4: AUDIT LOGS (STEP 5) === */}
+        {/* === TAB 4: AUDIT LOGS (WITH LATE REASON) === */}
         {activeTab === 'audit' && (
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            
-            {/* Sub Tabs */}
             <div className="flex border-b border-slate-200 bg-slate-50">
               <button onClick={() => setAuditSubTab('attendance')} className={`flex-1 py-3 font-bold text-sm ${auditSubTab === 'attendance' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-100'}`}>Attendance & Emergency</button>
               <button onClick={() => setAuditSubTab('short_leaves')} className={`flex-1 py-3 font-bold text-sm ${auditSubTab === 'short_leaves' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500 hover:bg-slate-100'}`}>Short Leaves</button>
@@ -430,7 +422,6 @@ const CompanyDashboard = () => {
             </div>
 
             <div className="p-6 overflow-x-auto">
-              {/* SUB TAB: ATTENDANCE */}
               {auditSubTab === 'attendance' && (
                 <>
                   <div className="flex gap-2 mb-4 items-center">
@@ -452,11 +443,12 @@ const CompanyDashboard = () => {
                         <th className="p-3">Check In</th>
                         <th className="p-3">Door Unlocked</th>
                         <th className="p-3">Check Out</th>
-                        <th className="p-3 max-w-xs">Emergency Reason</th>
+                        <th className="p-3 max-w-[150px]">Late Reason</th>
+                        <th className="p-3 max-w-[150px]">Emergency Reason</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredAttendance.length === 0 ? <tr><td colSpan="7" className="p-4 text-center text-slate-500">No records found.</td></tr> : null}
+                      {filteredAttendance.length === 0 ? <tr><td colSpan="8" className="p-4 text-center text-slate-500">No records found.</td></tr> : null}
                       {filteredAttendance.map(log => (
                         <tr key={log.id} className="border-b hover:bg-slate-50">
                           <td className="p-3 font-bold text-slate-700">{log.date}</td>
@@ -477,7 +469,11 @@ const CompanyDashboard = () => {
                               {log.is_emergency_checkout && <span className="text-[10px] bg-red-100 px-1 rounded uppercase">Emerg.</span>}
                             </span>
                           </td>
-                          <td className="p-3 max-w-xs truncate text-red-700 italic" title={log.emergency_checkout_reason}>
+                          {/* ✅ NEW LATE REASON COLUMN */}
+                          <td className="p-3 max-w-[150px] truncate text-orange-700 italic" title={log.late_reason}>
+                            {log.late_reason || '-'}
+                          </td>
+                          <td className="p-3 max-w-[150px] truncate text-red-700 italic" title={log.emergency_checkout_reason}>
                             {log.emergency_checkout_reason || '-'}
                           </td>
                         </tr>
@@ -487,7 +483,6 @@ const CompanyDashboard = () => {
                 </>
               )}
 
-              {/* SUB TAB: SHORT LEAVES */}
               {auditSubTab === 'short_leaves' && (
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="bg-slate-100 text-slate-600">
@@ -514,7 +509,6 @@ const CompanyDashboard = () => {
                 </table>
               )}
 
-              {/* SUB TAB: DOOR EVENTS */}
               {auditSubTab === 'door_events' && (
                 <table className="w-full text-left text-sm whitespace-nowrap">
                   <thead className="bg-slate-100 text-slate-600">
@@ -549,7 +543,6 @@ const CompanyDashboard = () => {
 
       </div>
 
-      {/* === CALENDAR MODAL === */}
       {showCalendar && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl relative">

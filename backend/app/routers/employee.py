@@ -8,7 +8,8 @@ from jose import jwt
 
 from app.db.models import Company, Employee, Attendance, DepartmentSession, LocationLog, ShortLeave
 from app.db.database import get_db
-from app.schemas.schemas import AttendanceMark, TrackingStart, LocationUpdate, EmergencyCheckout, ShortLeaveRequest
+# ✅ Added SubmitExcuse
+from app.schemas.schemas import AttendanceMark, TrackingStart, LocationUpdate, EmergencyCheckout, ShortLeaveRequest, SubmitExcuse
 from app.routers.auth import oauth2_scheme
 from app.core.config import settings
 
@@ -23,7 +24,6 @@ def get_local_now(company: Company) -> datetime:
         tz = pytz.UTC
     return datetime.now(tz).replace(tzinfo=None)
 
-# --- HELPER: Verify Employee Token ---
 def get_current_employee(token: str = Depends(oauth2_scheme)):
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
@@ -42,12 +42,12 @@ class AttendanceHistoryItem(BaseModel):
     check_in_time: Optional[str] = None
     door_unlock_time: Optional[str] = None
     check_out_time: Optional[str] = None
+    late_reason: Optional[str] = None  # ✅ Added late_reason to history
 
 class EmployeeActionPayload(BaseModel):
     employee_id: str
 
 
-# 1. GET MY PROFILE
 @router.get("/api/me")
 def get_my_profile(db: Session = Depends(get_db), user: dict = Depends(get_current_employee)):
     emp = db.query(Employee).filter(Employee.employee_id == user["sub"]).first()
@@ -71,11 +71,11 @@ def get_my_profile(db: Session = Depends(get_db), user: dict = Depends(get_curre
         "today": {
             "status": att.status if att else "Absent",
             "checkIn": att.check_in_time.isoformat() if att and att.check_in_time else None,
-            "checkOut": att.check_out_time.isoformat() if att and att.check_out_time else None
+            "checkOut": att.check_out_time.isoformat() if att and att.check_out_time else None,
+            "lateReason": att.late_reason if att and att.late_reason else None
         }
     }
 
-# ✅ 2. MARK ATTENDANCE (UPDATED FOR SUPER LATE - STEP 4)
 @router.post("/api/mark_attendance")
 def mark_attendance(
     payload: AttendanceMark,
@@ -127,7 +127,6 @@ def mark_attendance(
     
     return {"status": "error", "message": "Already checked in today"}
 
-# 3. UNLOCK DOOR
 @router.post("/api/unlock_door")
 def unlock_door(
     payload: EmployeeActionPayload,
@@ -162,7 +161,6 @@ def unlock_door(
     db.commit()
     return {"status": "success", "message": "Door unlocked"}
 
-# 4. MARK CHECK-OUT
 @router.post("/api/mark_checkout")
 def mark_checkout(
     payload: EmployeeActionPayload,
@@ -197,7 +195,6 @@ def mark_checkout(
     db.commit()
     return {"status": "success", "message": "Checked out successfully"}
 
-# 4b. EMERGENCY CHECK-OUT
 @router.post("/api/emergency_checkout")
 def emergency_checkout(
     payload: EmergencyCheckout,
@@ -227,7 +224,29 @@ def emergency_checkout(
     db.commit()
     return {"status": "success", "message": "Emergency checkout recorded"}
 
-# 5. SHORT LEAVE REQUEST (EXIT)
+# ✅ LATE EXCUSE ENDPOINT (Improvement 1)
+@router.post("/api/submit_excuse")
+def submit_excuse(
+    payload: SubmitExcuse,
+    db: Session = Depends(get_db),
+    user: dict = Depends(get_current_employee)
+):
+    company = db.query(Company).filter(Company.id == user["company_id"]).first()
+    now = get_local_now(company)
+    today = now.date()
+    
+    att = db.query(Attendance).filter(
+        Attendance.employee_id == user["sub"],
+        Attendance.date_only == today
+    ).first()
+    
+    if not att:
+        raise HTTPException(404, "No attendance record found for today")
+        
+    att.late_reason = payload.reason
+    db.commit()
+    return {"status": "success", "message": "Late reason submitted"}
+
 @router.post("/api/short_leave/request")
 def request_short_leave(
     payload: ShortLeaveRequest,
@@ -267,7 +286,6 @@ def request_short_leave(
     db.commit()
     return {"status": "success", "message": "Short leave door unlocked for exit"}
 
-# 6. SHORT LEAVE RETURN (ENTRY)
 @router.post("/api/short_leave/return")
 def return_short_leave(
     payload: EmployeeActionPayload,
@@ -294,7 +312,6 @@ def return_short_leave(
     db.commit()
     return {"status": "success", "message": "Door unlocked for entry. Welcome back!"}
 
-# 7. GET TODAY'S SHORT LEAVES
 @router.get("/api/short_leave/today")
 def get_today_short_leaves(
     db: Session = Depends(get_db),
@@ -317,7 +334,6 @@ def get_today_short_leaves(
         } for l in leaves
     ]
 
-# 8. START TRACKING
 @router.post("/api/tracking/start")
 def start_tracking(
     payload: TrackingStart,
@@ -344,7 +360,6 @@ def start_tracking(
     db.commit()
     return {"status": "success", "session_id": sess.id}
 
-# 9. PUSH GPS LOCATION
 @router.post("/api/tracking/update")
 def update_location(payload: LocationUpdate, db: Session = Depends(get_db)):
     session = db.query(DepartmentSession).filter(DepartmentSession.id == payload.session_id).first()
@@ -361,7 +376,6 @@ def update_location(payload: LocationUpdate, db: Session = Depends(get_db)):
     db.commit()
     return {"status": "success"}
 
-# 10. GET MY HISTORY
 @router.get("/api/history", response_model=List[AttendanceHistoryItem])
 def get_my_history(
     db: Session = Depends(get_db),
@@ -381,11 +395,11 @@ def get_my_history(
             "check_in_time": record.check_in_time.isoformat() if record.check_in_time else None,
             "door_unlock_time": record.door_unlock_time.isoformat() if getattr(record, 'door_unlock_time', None) else None,
             "check_out_time": record.check_out_time.isoformat() if record.check_out_time else None,
+            "late_reason": getattr(record, 'late_reason', None) # ✅ Expose late_reason
         })
         
     return results
 
-# 11. OFFICE CONFIG
 @router.get("/api/office_config")
 def get_office_config(
     db: Session = Depends(get_db), 
@@ -410,7 +424,6 @@ def get_office_config(
         "super_late_threshold": getattr(company, 'super_late_threshold', 30)
     }
 
-# 12. GET ATTENDANCE HISTORY (DEPRECATED OR INTERNAL)
 @router.get("/api/me/attendance")
 def get_my_attendance(
     current_user: dict = Depends(get_current_employee),

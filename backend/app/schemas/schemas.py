@@ -74,12 +74,14 @@ class ManualAttendance(BaseModel):
     type: str
     notes: Optional[str] = "Manual Entry"
 
-# EMERGENCY CHECK-OUT (STEP 2)
 class EmergencyCheckout(BaseModel):
     employee_id: str
     reason: str
 
-# ✅ NEW: SHORT LEAVE (STEP 3)
+# ✅ NEW: LATE REASON SUBMISSION
+class SubmitExcuse(BaseModel):
+    reason: str
+
 class ShortLeaveRequest(BaseModel):
     employee_id: str
     reason: str
@@ -104,7 +106,6 @@ class EmergencyOpen(BaseModel):
     device_id: int
     reason: str
 
-# [NEW] Schedule Settings
 class ScheduleUpdate(BaseModel):
-    start_time: str # "09:00"
-    end_time: str   # "17:00"
+    start_time: str 
+    end_time: str
