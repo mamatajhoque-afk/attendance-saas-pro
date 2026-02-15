@@ -26,9 +26,15 @@ class Company(Base):
     office_lng = Column(String, default="90.4125")
     office_radius = Column(String, default="50")
 
-    # ✅ NEW: WORK SCHEDULE
+    # WORK SCHEDULE
     work_start_time = Column(String, default="09:00") # Format "HH:MM"
     work_end_time = Column(String, default="17:00")   # Format "HH:MM"
+    
+    # TIMEZONE (STEP 0)
+    timezone = Column(String, default="UTC")
+    
+    # ✅ NEW: SUPER LATE THRESHOLD (STEP 4) - Stored in minutes
+    super_late_threshold = Column(Integer, default=30)
     
     admins = relationship("CompanyAdmin", back_populates="company")
     employees = relationship("Employee", back_populates="company")
@@ -54,7 +60,6 @@ class Employee(Base):
     last_login = Column(DateTime)
     deleted_at = Column(DateTime, nullable=True)
     
-    # ✅ ADDED THIS MISSING COLUMN
     status = Column(String, default="active") 
 
     # Security Features
@@ -112,10 +117,30 @@ class Attendance(Base):
     source = Column(String, default="MOBILE") 
     device_id = Column(String, nullable=True)
 
-    # ✅ ADDED THESE 3 MISSING COLUMNS
     type = Column(String, nullable=True)       # 'check_in' or 'check_out'
     method = Column(String, nullable=True)     # 'MANUAL_ADMIN', 'GPS', etc.
     image_url = Column(String, nullable=True)  # Used for notes
+
+    # TRACKING TIMES (STEP 1)
+    door_unlock_time = Column(DateTime, nullable=True)
+    check_out_enabled_time = Column(DateTime, nullable=True)
+
+    # EMERGENCY CHECK-OUT (STEP 2)
+    is_emergency_checkout = Column(Boolean, default=False)
+    emergency_checkout_reason = Column(String, nullable=True)
+
+# SHORT LEAVE MODEL (STEP 3)
+class ShortLeave(Base):
+    __tablename__ = "short_leaves"
+    id = Column(Integer, primary_key=True, index=True)
+    
+    company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
+    employee_id = Column(String, index=True)
+    date_only = Column(Date, index=True)
+    
+    reason = Column(String, nullable=False)
+    exit_time = Column(DateTime, nullable=False)
+    return_time = Column(DateTime, nullable=True)
 
 class HardwareDevice(Base):
     __tablename__ = "hardware_devices"

@@ -54,7 +54,6 @@ class EmployeeResponse(BaseModel):
         from_attributes = True
 
 # --- 4. ATTENDANCE & TRACKING ---
-# (Restored these for Mobile App)
 class AttendanceMark(BaseModel):
     employee_id: str
     location: str
@@ -74,6 +73,19 @@ class ManualAttendance(BaseModel):
     timestamp: datetime
     type: str
     notes: Optional[str] = "Manual Entry"
+
+# EMERGENCY CHECK-OUT (STEP 2)
+class EmergencyCheckout(BaseModel):
+    employee_id: str
+    reason: str
+
+# ✅ NEW: SHORT LEAVE (STEP 3)
+class ShortLeaveRequest(BaseModel):
+    employee_id: str
+    reason: str
+
+class ShortLeaveReturn(BaseModel):
+    employee_id: str
 
 # --- 5. OFFICE & HARDWARE ---
 class OfficeSettings(BaseModel):

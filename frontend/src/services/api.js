@@ -67,7 +67,6 @@ export const superAdminService = {
 };
 
 export const companyService = {
-  // ✅ FIXED: Matches Backend Route "/company/employees"
   addEmployee: (data) => api.post('/company/employees', data),
   
   getEmployees: () => api.get('/company/employees'),
@@ -81,7 +80,6 @@ export const companyService = {
   getDevices: () => api.get('/company/devices'),
   emergencyOpen: (deviceId, reason) => api.post('/company/devices/emergency-open', { device_id: deviceId, reason }),
 
-// ✅ FIXED: Added headers to force 'multipart/form-data'
   updateSettings: (lat, lng, radius) => {
     const formData = new FormData();
     formData.append('lat', lat);
@@ -93,7 +91,6 @@ export const companyService = {
     });
   },
 
-  // ✅ FIXED: Renamed to match Dashboard & sends JSON to match Backend
   updateLocation: (lat, lng, radius) => {
     return api.post('/company/settings/location', { 
       lat: lat, 
@@ -101,12 +98,18 @@ export const companyService = {
       radius: radius 
     });
   },
-  // Schedule function
-  updateSchedule: (startTime, endTime) => api.post('/company/settings/schedule', {
+  
+  updateSchedule: (startTime, endTime, timezone, superLateThreshold) => api.post('/company/settings/schedule', {
     work_start_time: startTime,
-    work_end_time: endTime
-  })
+    work_end_time: endTime,
+    timezone: timezone,
+    super_late_threshold: superLateThreshold
+  }),
 
+  // ✅ NEW: FULL AUDIT ENDPOINTS (STEP 5)
+  getAllAttendance: () => api.get('/company/audit/attendance'),
+  getAllShortLeaves: () => api.get('/company/audit/short_leaves'),
+  getAllDoorEvents: () => api.get('/company/audit/door_events'),
 };
 
 export const employeeService = {
