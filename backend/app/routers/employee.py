@@ -17,7 +17,6 @@ router = APIRouter()
 # --- LOCAL SCHEMAS ---
 class SubmitExcuseLocal(BaseModel):
     reason: str
-    employee_id: Optional[str] = None
 
 class AttendanceHistoryItem(BaseModel):
     date: str
@@ -32,15 +31,18 @@ class AttendanceHistoryItem(BaseModel):
 class EmployeeActionPayload(BaseModel):
     employee_id: str
 
-# --- HELPER: Get Company Local Time ---
+
+# --- HELPER: LOCAL TIMEZONE CONVERTER ---
 def get_local_now(company: Company) -> datetime:
     tz_str = company.timezone if company and getattr(company, 'timezone', None) else "UTC"
     try:
         tz = pytz.timezone(tz_str)
     except Exception:
         tz = pytz.UTC
-    # Strip tzinfo so PostgreSQL saves it exactly as the naive local time
-    return datetime.now(tz).replace(tzinfo=None)
+        
+    now_utc = datetime.utcnow().replace(tzinfo=pytz.utc)
+    local_time = now_utc.astimezone(tz)
+    return local_time.replace(tzinfo=None)
 
 def get_current_employee(token: str = Depends(oauth2_scheme)):
     try:
@@ -76,7 +78,7 @@ def get_my_profile(db: Session = Depends(get_db), user: dict = Depends(get_curre
             "status": att.status if att else "Absent",
             "checkIn": att.check_in_time.isoformat() if att and att.check_in_time else None,
             "checkOut": att.check_out_time.isoformat() if att and att.check_out_time else None,
-            "lateReason": att.late_reason if att and getattr(att, 'late_reason', None) else None
+            "lateReason": getattr(att, 'late_reason', None) if att else None
         }
     }
 
@@ -230,26 +232,28 @@ def emergency_checkout(
     db.commit()
     return {"status": "success", "message": "Emergency checkout recorded"}
 
-# ✅ FIXED: BULLETPROOF LATE REASON ENDPOINT
+# ==========================================
+# ✅ THE EASY WAY: JUST GRAB THE LAST ROW
+# ==========================================
 @router.post("/api/submit_excuse")
 def submit_excuse(
     payload: SubmitExcuseLocal,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_employee)
 ):
-    emp_id = payload.employee_id or user.get("sub")
+    # 1. Grab the absolute most recent attendance row for this employee
+    last_record = db.query(Attendance).filter(
+        Attendance.employee_id == user["sub"]
+    ).order_by(Attendance.id.desc()).first()
     
-    # Grab the absolute latest attendance record for this exact employee
-    att = db.query(Attendance).filter(
-        Attendance.employee_id == emp_id
-    ).order_by(Attendance.timestamp.desc()).first()
-    
-    if not att:
-        raise HTTPException(404, "No attendance record found to attach reason")
+    if not last_record:
+        return {"status": "error", "message": "No attendance record found"}
         
-    att.late_reason = payload.reason
+    # 2. Put the reason in the column and save. That's it.
+    last_record.late_reason = payload.reason
     db.commit()
-    return {"status": "success", "message": "Late reason submitted and saved!"}
+    
+    return {"status": "success", "message": "Late reason saved successfully"}
 
 
 @router.post("/api/short_leave/request")
