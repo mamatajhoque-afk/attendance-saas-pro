@@ -241,29 +241,29 @@ def submit_excuse(
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_employee)
 ):
-    # 1. Identify the employee
-    emp_id = user.get("sub")
-    
-    # 2. Find the absolute most recent attendance record ID for this employee
-    # We use a subquery to get the ID first to avoid session conflicts
-    target_id = db.query(Attendance.id).filter(
-        Attendance.employee_id == emp_id
-    ).order_by(Attendance.id.desc()).first()
+    emp_id = user["sub"]
 
-    if not target_id:
-        raise HTTPException(status_code=404, detail="No attendance record found for this user.")
+    # Get today's attendance
+    att = db.query(Attendance).filter(
+        Attendance.employee_id == emp_id,
+        Attendance.date_only == datetime.utcnow().date()
+    ).first()
 
-    # 3. Perform a clean, atomic update using the ID
-    try:
-        db.query(Attendance).filter(Attendance.id == target_id[0]).update(
-            {"late_reason": payload.reason}, 
-            synchronize_session=False
-        )
-        db.commit()
-        return {"status": "success", "message": "Late reason saved to database."}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    if not att:
+        raise HTTPException(404, "No attendance record for today")
+
+    if att.status not in ("Late", "Super Late"):
+        raise HTTPException(400, "Late reason allowed only for Late or Super Late")
+
+    att.late_reason = payload.reason
+    db.commit()
+    db.refresh(att)
+
+    return {
+        "status": "success",
+        "message": "Late reason saved successfully"
+    }
+
 
 @router.post("/api/short_leave/request")
 def request_short_leave(
