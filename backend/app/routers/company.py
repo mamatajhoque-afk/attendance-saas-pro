@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, timedelta
 from pydantic import BaseModel, validator
 import re
+import pytz
 
 from app.db.database import get_db
 from app.db.models import Employee, Attendance, HardwareDevice, DoorEvent, LocationLog, Company, DepartmentSession, ShortLeave, CompanyAdmin
@@ -217,15 +218,40 @@ def mark_manual_attendance(
     
     if not emp: raise HTTPException(404, "Employee not found")
     
-    record_time = payload.timestamp
+    company = db.query(Company).filter(Company.id == company_id).first()
+    
+    # --- ✅ FIX: Convert UTC timestamp from React to Company Local Time ---
+    tz_str = company.timezone if company and getattr(company, 'timezone', None) else "UTC"
+    try:
+        tz = pytz.timezone(tz_str)
+    except Exception:
+        tz = pytz.UTC
+        
+    dt = payload.timestamp
+    # If FastAPI parses it as naive (no timezone info), assume it's UTC from the frontend
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+        
+    # Convert to company's timezone and strip the tzinfo so Postgres saves it as a naive local time
+    record_time = dt.astimezone(tz).replace(tzinfo=None)
     record_date = record_time.date()
+    # -----------------------------------------------------------------
+
     status = "Present"
 
     if payload.type == 'check_in':
-        company = db.query(Company).filter(Company.id == company_id).first()
         if company and company.work_start_time:
             work_start = datetime.strptime(company.work_start_time, "%H:%M").time()
-            if record_time.time() > work_start:
+            start_datetime = datetime.combine(record_date, work_start)
+            
+            threshold_minutes = getattr(company, 'super_late_threshold', 30)
+            if threshold_minutes is None: threshold_minutes = 30
+            
+            super_late_datetime = start_datetime + timedelta(minutes=threshold_minutes)
+            
+            if record_time > super_late_datetime:
+                status = "Super Late"
+            elif record_time.time() > work_start:
                 status = "Late"
 
     new_log = Attendance(
@@ -249,7 +275,6 @@ def mark_manual_attendance(
 # 3. DEVICES & SETTINGS
 # ==========================================
 
-# ✅ NEW ENDPOINT TO FETCH SAVED SETTINGS
 @router.get("/company/settings")
 def get_company_settings(
     current_user: TokenData = Depends(get_current_active_admin),
