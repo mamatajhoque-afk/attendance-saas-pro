@@ -170,7 +170,7 @@ def get_employee_history(
             "check_out_time": log.check_out_time.isoformat() if log.check_out_time else None,
             "is_emergency_checkout": log.is_emergency_checkout,
             "emergency_checkout_reason": log.emergency_checkout_reason,
-            "late_reason": getattr(log, 'late_reason', None) # ✅ Included Late Reason
+            "late_reason": getattr(log, 'late_reason', None) 
         } for log in logs
     ]
 
@@ -249,6 +249,26 @@ def mark_manual_attendance(
 # 3. DEVICES & SETTINGS
 # ==========================================
 
+# ✅ NEW ENDPOINT TO FETCH SAVED SETTINGS
+@router.get("/company/settings")
+def get_company_settings(
+    current_user: TokenData = Depends(get_current_active_admin),
+    db: Session = Depends(get_db)
+):
+    company_id = get_safe_company_id(current_user, db)
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company: raise HTTPException(404, "Company not found")
+    
+    return {
+        "office_lat": company.office_lat,
+        "office_lng": company.office_lng,
+        "office_radius": company.office_radius,
+        "work_start_time": company.work_start_time,
+        "work_end_time": company.work_end_time,
+        "timezone": getattr(company, 'timezone', 'UTC'),
+        "super_late_threshold": getattr(company, 'super_late_threshold', 30)
+    }
+
 @router.get("/company/devices")
 def get_company_devices(
     current_user: TokenData = Depends(get_current_active_admin),
@@ -316,7 +336,7 @@ def update_schedule(
 
 
 # ==========================================
-# 4. FULL AUDIT ENDPOINTS 
+# 4. FULL AUDIT ENDPOINTS
 # ==========================================
 
 @router.get("/company/audit/attendance")
@@ -337,7 +357,7 @@ def get_all_attendance(db: Session = Depends(get_db), current_user: TokenData = 
             "check_out_time": log.check_out_time.isoformat() if log.check_out_time else None,
             "is_emergency_checkout": getattr(log, 'is_emergency_checkout', False),
             "emergency_checkout_reason": getattr(log, 'emergency_checkout_reason', None),
-            "late_reason": getattr(log, 'late_reason', None) # ✅ Included Late Reason
+            "late_reason": getattr(log, 'late_reason', None) 
         } for log in logs
     ]
 

@@ -34,16 +34,41 @@ const CompanyDashboard = () => {
 
   const navigate = useNavigate();
 
+  // Load Initial Data
   useEffect(() => {
     loadEmployees();
     loadDevices(); 
+    loadSettings(); // ✅ Added to load saved timezone/schedule
   }, []);
 
+  // Load Audit Logs when tab is active
   useEffect(() => {
     if (activeTab === 'audit') {
       loadAuditData();
     }
   }, [activeTab]);
+
+  // --- FUNCTIONS ---
+
+  const loadSettings = async () => {
+    try {
+      const res = await companyService.getSettings();
+      const data = res.data;
+      setSettings({
+        lat: data.office_lat || '',
+        lng: data.office_lng || '',
+        radius: data.office_radius || '50'
+      });
+      setSchedule({
+        start: data.work_start_time || '09:00',
+        end: data.work_end_time || '17:00',
+        timezone: data.timezone || 'UTC',
+        superLateThreshold: data.super_late_threshold || 30
+      });
+    } catch (err) {
+      console.error("Failed to load settings");
+    }
+  };
 
   const loadAuditData = async () => {
     try {
@@ -67,6 +92,7 @@ const CompanyDashboard = () => {
     try {
       await companyService.updateSchedule(schedule.start, schedule.end, schedule.timezone, schedule.superLateThreshold);
       toast.success("Work Schedule Updated 🕒");
+      loadSettings(); // Refresh
     } catch (err) { toast.error("Failed to update schedule"); }
   };
 
@@ -75,6 +101,7 @@ const CompanyDashboard = () => {
     try {
       await companyService.updateLocation(settings.lat, settings.lng, settings.radius);
       toast.success("Office Location Updated 📍");
+      loadSettings(); // Refresh
     } catch (err) { toast.error("Failed to update location"); }
   };
 
@@ -469,7 +496,6 @@ const CompanyDashboard = () => {
                               {log.is_emergency_checkout && <span className="text-[10px] bg-red-100 px-1 rounded uppercase">Emerg.</span>}
                             </span>
                           </td>
-                          {/* ✅ NEW LATE REASON COLUMN */}
                           <td className="p-3 max-w-[150px] truncate text-orange-700 italic" title={log.late_reason}>
                             {log.late_reason || '-'}
                           </td>
