@@ -33,7 +33,7 @@ const CompanyDashboard = () => {
   const [auditSubTab, setAuditSubTab] = useState('attendance');
   const [attFilter, setAttFilter] = useState('all'); 
 
-  // ✅ HOLIDAY STATE (NEW)
+  // HOLIDAY STATE
   const [weeklyHolidays, setWeeklyHolidays] = useState([]);
   const [singleHolidays, setSingleHolidays] = useState([]);
 
@@ -44,12 +44,12 @@ const CompanyDashboard = () => {
     loadEmployees();
     loadDevices(); 
     loadSettings(); 
+    loadHolidays(); // ✅ Now loads immediately so the Staff calendar popup has the data!
   }, []);
 
   // Load Tab-Specific Data
   useEffect(() => {
     if (activeTab === 'audit') loadAuditData();
-    if (activeTab === 'holidays') loadHolidays();
   }, [activeTab]);
 
   // --- API FUNCTIONS ---
@@ -110,7 +110,6 @@ const CompanyDashboard = () => {
       updated.push(day);
     }
     
-    // Optimistic UI Update
     setWeeklyHolidays(updated);
     
     try {
@@ -118,7 +117,7 @@ const CompanyDashboard = () => {
       toast.success("Weekly Holidays Updated");
     } catch (err) {
       toast.error("Failed to save weekly holidays");
-      loadHolidays(); // Revert on failure
+      loadHolidays(); 
     }
   };
 
@@ -142,17 +141,14 @@ const CompanyDashboard = () => {
     }
   };
 
-  // Check if a specific date is a holiday (Weekly or Single)
   const isHoliday = (date) => {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const dateStr = `${year}-${month}-${day}`;
 
-    // 1. Check Single Date Holidays
     if (singleHolidays.includes(dateStr)) return true;
 
-    // 2. Check Weekly Recurring Holidays
     const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const dayName = daysOfWeek[date.getDay()];
     if (weeklyHolidays.includes(dayName)) return true;
@@ -282,8 +278,12 @@ const CompanyDashboard = () => {
     }
   };
 
+  // ✅ UPDATED: Exact same logic as the Employee Dashboard
   const getAttendanceTileClassName = ({ date, view }) => {
     if (view === 'month') {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+
       const dayLogs = attendanceHistory.filter(log => {
         const logDate = new Date(log.timestamp);
         return logDate.getDate() === date.getDate() &&
@@ -298,6 +298,14 @@ const CompanyDashboard = () => {
         if (isSuperLate) return 'bg-[#B8860B] text-white font-bold rounded-md'; 
         if (isLate) return 'bg-[#FFEB3B] text-black font-bold rounded-md';      
         return 'bg-[#006400] text-white font-bold rounded-md';                  
+      }
+
+      if (isHoliday(date)) {
+        return 'bg-purple-100 text-purple-700 font-bold rounded-md border border-purple-200';
+      }
+
+      if (date < today) {
+        return 'bg-[#8B0000] text-white font-bold rounded-md'; 
       }
     }
     return null;
@@ -526,11 +534,10 @@ const CompanyDashboard = () => {
            </div>
         )}
 
-        {/* === TAB 4: HOLIDAYS (NEW STEP) === */}
+        {/* === TAB 4: HOLIDAYS === */}
         {activeTab === 'holidays' && (
           <div className="max-w-4xl mx-auto space-y-6">
             
-            {/* Weekly Recurring Holidays */}
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
               <h2 className="font-bold text-xl mb-2 text-slate-800 flex items-center gap-2">
                 <CalendarDays className="text-purple-600"/> Weekly Holidays
@@ -557,7 +564,6 @@ const CompanyDashboard = () => {
               </div>
             </div>
 
-            {/* Single Date Calendar Holidays */}
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
               <div className="mb-6">
                 <h2 className="font-bold text-xl mb-2 text-slate-800 flex items-center gap-2">
@@ -717,6 +723,7 @@ const CompanyDashboard = () => {
 
       </div>
 
+      {/* ✅ STAFF HISTORY MODAL (WITH SYNCED HOLIDAY COLORS) */}
       {showCalendar && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl relative">
@@ -745,6 +752,9 @@ const CompanyDashboard = () => {
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 rounded bg-[#B8860B]"></div> <span>Super Late</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded bg-purple-200 border border-purple-300"></div> <span>Holiday</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 rounded bg-[#8B0000]"></div> <span>Absent</span>
