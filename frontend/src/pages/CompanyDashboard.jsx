@@ -6,7 +6,8 @@ import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
 import { 
   Building2, Users, MapPin, History, LogOut, 
-  Trash2, Power, UserCheck, ShieldAlert, Fingerprint, Lock, Settings, Clock, X, Crosshair, ClipboardList, Filter
+  Trash2, Power, UserCheck, ShieldAlert, Fingerprint, 
+  Lock, Settings, Clock, X, Crosshair, ClipboardList, Filter, CalendarDays
 } from 'lucide-react';
 
 const CompanyDashboard = () => {
@@ -32,23 +33,26 @@ const CompanyDashboard = () => {
   const [auditSubTab, setAuditSubTab] = useState('attendance');
   const [attFilter, setAttFilter] = useState('all'); 
 
+  // ✅ HOLIDAY STATE (NEW)
+  const [weeklyHolidays, setWeeklyHolidays] = useState([]);
+  const [singleHolidays, setSingleHolidays] = useState([]);
+
   const navigate = useNavigate();
 
   // Load Initial Data
   useEffect(() => {
     loadEmployees();
     loadDevices(); 
-    loadSettings(); // ✅ Added to load saved timezone/schedule
+    loadSettings(); 
   }, []);
 
-  // Load Audit Logs when tab is active
+  // Load Tab-Specific Data
   useEffect(() => {
-    if (activeTab === 'audit') {
-      loadAuditData();
-    }
+    if (activeTab === 'audit') loadAuditData();
+    if (activeTab === 'holidays') loadHolidays();
   }, [activeTab]);
 
-  // --- FUNCTIONS ---
+  // --- API FUNCTIONS ---
 
   const loadSettings = async () => {
     try {
@@ -87,12 +91,92 @@ const CompanyDashboard = () => {
     }
   };
 
+  // ✅ HOLIDAY FUNCTIONS
+  const loadHolidays = async () => {
+    try {
+      const res = await companyService.getHolidays();
+      setWeeklyHolidays(res.data.weekly_holidays || []);
+      setSingleHolidays(res.data.single_dates.map(h => h.date) || []);
+    } catch (err) {
+      toast.error("Failed to load holidays");
+    }
+  };
+
+  const handleToggleWeeklyHoliday = async (day) => {
+    let updated = [...weeklyHolidays];
+    if (updated.includes(day)) {
+      updated = updated.filter(d => d !== day);
+    } else {
+      updated.push(day);
+    }
+    
+    // Optimistic UI Update
+    setWeeklyHolidays(updated);
+    
+    try {
+      await companyService.updateWeeklyHolidays(updated);
+      toast.success("Weekly Holidays Updated");
+    } catch (err) {
+      toast.error("Failed to save weekly holidays");
+      loadHolidays(); // Revert on failure
+    }
+  };
+
+  const handleToggleSingleHoliday = async (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+
+    try {
+      const res = await companyService.toggleHoliday(dateStr, "Company Holiday");
+      if (res.data.action === 'added') {
+        setSingleHolidays([...singleHolidays, dateStr]);
+        toast.success(`Holiday added for ${dateStr}`);
+      } else {
+        setSingleHolidays(singleHolidays.filter(d => d !== dateStr));
+        toast.success(`Holiday removed from ${dateStr}`);
+      }
+    } catch (err) {
+      toast.error("Failed to toggle holiday");
+    }
+  };
+
+  // Check if a specific date is a holiday (Weekly or Single)
+  const isHoliday = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const dateStr = `${year}-${month}-${day}`;
+
+    // 1. Check Single Date Holidays
+    if (singleHolidays.includes(dateStr)) return true;
+
+    // 2. Check Weekly Recurring Holidays
+    const daysOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const dayName = daysOfWeek[date.getDay()];
+    if (weeklyHolidays.includes(dayName)) return true;
+
+    return false;
+  };
+
+  const getHolidayTileClassName = ({ date, view }) => {
+    if (view === 'month') {
+      if (isHoliday(date)) {
+        return 'bg-purple-100 text-purple-700 font-bold rounded-lg border border-purple-300';
+      }
+    }
+    return null;
+  };
+
+  // --- STANDARD FUNCTIONS ---
+
   const handleSaveSchedule = async (e) => {
     e.preventDefault();
     try {
       await companyService.updateSchedule(schedule.start, schedule.end, schedule.timezone, schedule.superLateThreshold);
       toast.success("Work Schedule Updated 🕒");
-      loadSettings(); // Refresh
+      loadSettings(); 
     } catch (err) { toast.error("Failed to update schedule"); }
   };
 
@@ -101,7 +185,7 @@ const CompanyDashboard = () => {
     try {
       await companyService.updateLocation(settings.lat, settings.lng, settings.radius);
       toast.success("Office Location Updated 📍");
-      loadSettings(); // Refresh
+      loadSettings(); 
     } catch (err) { toast.error("Failed to update location"); }
   };
 
@@ -198,7 +282,7 @@ const CompanyDashboard = () => {
     }
   };
 
-  const getTileClassName = ({ date, view }) => {
+  const getAttendanceTileClassName = ({ date, view }) => {
     if (view === 'month') {
       const dayLogs = attendanceHistory.filter(log => {
         const logDate = new Date(log.timestamp);
@@ -231,6 +315,8 @@ const CompanyDashboard = () => {
     return true; 
   });
 
+  const weekDaysList = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans relative">
       <div className="max-w-7xl mx-auto">
@@ -254,6 +340,9 @@ const CompanyDashboard = () => {
           </button>
           <button onClick={() => setActiveTab('settings')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'settings' ? 'bg-slate-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
             <Settings size={18}/> Office Settings
+          </button>
+          <button onClick={() => setActiveTab('holidays')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'holidays' ? 'bg-purple-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
+            <CalendarDays size={18}/> Holidays
           </button>
           <button onClick={() => setActiveTab('audit')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'audit' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
             <ClipboardList size={18}/> Audit Logs
@@ -396,7 +485,6 @@ const CompanyDashboard = () => {
                   <label className="block text-sm font-bold text-slate-700 mb-1">Super Late Threshold (Minutes)</label>
                   <input type="number" min="1" className="w-full border p-2 rounded bg-slate-50"
                     value={schedule.superLateThreshold} onChange={e => setSchedule({...schedule, superLateThreshold: e.target.value})} required />
-                  <p className="text-xs text-slate-400 mt-1">Check-ins after Start Time + this threshold will be marked as Super Late.</p>
                 </div>
                 <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded">
                   Update Schedule
@@ -429,7 +517,6 @@ const CompanyDashboard = () => {
                   <label className="block text-sm font-bold text-slate-700 mb-1">Geofence Radius (Meters)</label>
                   <input type="number" className="w-full border p-2 rounded"
                     value={settings.radius} onChange={e => setSettings({...settings, radius: e.target.value})} required />
-                  <p className="text-xs text-slate-400 mt-1">Distance allowed from center point.</p>
                 </div>
                 <button className="w-full bg-slate-800 hover:bg-slate-900 text-white font-bold py-3 rounded">
                   Update Location
@@ -439,7 +526,68 @@ const CompanyDashboard = () => {
            </div>
         )}
 
-        {/* === TAB 4: AUDIT LOGS (WITH LATE REASON) === */}
+        {/* === TAB 4: HOLIDAYS (NEW STEP) === */}
+        {activeTab === 'holidays' && (
+          <div className="max-w-4xl mx-auto space-y-6">
+            
+            {/* Weekly Recurring Holidays */}
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+              <h2 className="font-bold text-xl mb-2 text-slate-800 flex items-center gap-2">
+                <CalendarDays className="text-purple-600"/> Weekly Holidays
+              </h2>
+              <p className="text-slate-500 text-sm mb-6">Select the days your company is closed every week. These days will automatically be marked as holidays.</p>
+              
+              <div className="flex flex-wrap gap-3">
+                {weekDaysList.map(day => {
+                  const isActive = weeklyHolidays.includes(day);
+                  return (
+                    <button
+                      key={day}
+                      onClick={() => handleToggleWeeklyHoliday(day)}
+                      className={`px-5 py-2.5 rounded-lg font-bold text-sm transition-all border ${
+                        isActive 
+                        ? 'bg-purple-100 text-purple-700 border-purple-300 shadow-sm' 
+                        : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Single Date Calendar Holidays */}
+            <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
+              <div className="mb-6">
+                <h2 className="font-bold text-xl mb-2 text-slate-800 flex items-center gap-2">
+                  <CalendarDays className="text-purple-600"/> Single-Date Holidays
+                </h2>
+                <p className="text-slate-500 text-sm">Click any date on the calendar to mark it as a specific holiday (e.g. National Holidays). Click again to remove it.</p>
+              </div>
+
+              <div className="calendar-wrapper custom-calendar max-w-2xl mx-auto">
+                <Calendar 
+                  onClickDay={handleToggleSingleHoliday} 
+                  tileClassName={getHolidayTileClassName} 
+                  className="w-full border-none font-sans text-sm shadow-md rounded-xl p-4 bg-slate-50"
+                />
+              </div>
+
+              <div className="mt-6 flex gap-4 text-sm font-bold justify-center">
+                <div className="flex items-center gap-2 text-slate-600">
+                  <span className="w-4 h-4 bg-purple-100 border border-purple-300 rounded-md block"></span> Holiday
+                </div>
+                <div className="flex items-center gap-2 text-slate-600">
+                  <span className="w-4 h-4 bg-white border border-slate-200 rounded-md block"></span> Work Day
+                </div>
+              </div>
+            </div>
+
+          </div>
+        )}
+
+        {/* === TAB 5: AUDIT LOGS === */}
         {activeTab === 'audit' && (
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
             <div className="flex border-b border-slate-200 bg-slate-50">
@@ -583,7 +731,7 @@ const CompanyDashboard = () => {
 
             <div className="calendar-container">
               <Calendar 
-                tileClassName={getTileClassName}
+                tileClassName={getAttendanceTileClassName}
                 className="w-full border-none shadow-none text-sm"
               />
             </div>

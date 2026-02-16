@@ -6,12 +6,16 @@ import re
 import pytz
 
 from app.db.database import get_db
-from app.db.models import Employee, Attendance, HardwareDevice, DoorEvent, LocationLog, Company, DepartmentSession, ShortLeave, CompanyAdmin
+from app.db.models import (
+    Employee, Attendance, HardwareDevice, DoorEvent, LocationLog, 
+    Company, DepartmentSession, ShortLeave, CompanyAdmin, CompanyHoliday # ✅ Added CompanyHoliday
+)
 from app.core.security import get_password_hash
 from app.routers.auth import get_current_active_admin
 from app.schemas.schemas import (
     EmployeeCreate, EmployeeUpdate, ManualAttendance, 
-    EmergencyOpen, TokenData, OfficeSettings
+    EmergencyOpen, TokenData, OfficeSettings,
+    WeeklyHolidaysUpdate, HolidayToggle # ✅ Added new holiday schemas
 )
 
 class ScheduleUpdate(BaseModel):
@@ -220,7 +224,6 @@ def mark_manual_attendance(
     
     company = db.query(Company).filter(Company.id == company_id).first()
     
-    # --- ✅ FIX: Convert UTC timestamp from React to Company Local Time ---
     tz_str = company.timezone if company and getattr(company, 'timezone', None) else "UTC"
     try:
         tz = pytz.timezone(tz_str)
@@ -228,14 +231,11 @@ def mark_manual_attendance(
         tz = pytz.UTC
         
     dt = payload.timestamp
-    # If FastAPI parses it as naive (no timezone info), assume it's UTC from the frontend
     if dt.tzinfo is None:
         dt = pytz.utc.localize(dt)
         
-    # Convert to company's timezone and strip the tzinfo so Postgres saves it as a naive local time
     record_time = dt.astimezone(tz).replace(tzinfo=None)
     record_date = record_time.date()
-    # -----------------------------------------------------------------
 
     status = "Present"
 
@@ -420,3 +420,73 @@ def get_all_door_events(db: Session = Depends(get_db), current_user: TokenData =
             "timestamp": e.created_at.isoformat()
         } for e in events
     ]
+
+
+# ==========================================
+# ✅ 5. HOLIDAY MANAGEMENT (NEW)
+# ==========================================
+
+@router.get("/company/holidays")
+def get_holidays(
+    db: Session = Depends(get_db), 
+    current_user: TokenData = Depends(get_current_active_admin)
+):
+    company_id = get_safe_company_id(current_user, db)
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(404, "Company not found")
+
+    holidays = db.query(CompanyHoliday).filter(CompanyHoliday.company_id == company_id).all()
+    
+    return {
+        "weekly_holidays": company.weekly_holidays or [],
+        "single_dates": [{"date": h.date.strftime("%Y-%m-%d"), "name": h.name} for h in holidays]
+    }
+
+@router.post("/company/holidays/weekly")
+def update_weekly_holidays(
+    payload: WeeklyHolidaysUpdate,
+    db: Session = Depends(get_db), 
+    current_user: TokenData = Depends(get_current_active_admin)
+):
+    company_id = get_safe_company_id(current_user, db)
+    company = db.query(Company).filter(Company.id == company_id).first()
+    
+    if not company:
+        raise HTTPException(404, "Company not found")
+        
+    company.weekly_holidays = payload.days
+    db.commit()
+    return {"status": "success", "message": "Weekly holidays updated"}
+
+@router.post("/company/holidays/toggle")
+def toggle_holiday(
+    payload: HolidayToggle,
+    db: Session = Depends(get_db), 
+    current_user: TokenData = Depends(get_current_active_admin)
+):
+    company_id = get_safe_company_id(current_user, db)
+    
+    try:
+        target_date = datetime.strptime(payload.date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(400, "Invalid date format. Use YYYY-MM-DD")
+
+    existing = db.query(CompanyHoliday).filter(
+        CompanyHoliday.company_id == company_id,
+        CompanyHoliday.date == target_date
+    ).first()
+
+    if existing:
+        db.delete(existing)
+        db.commit()
+        return {"status": "success", "action": "removed", "message": "Holiday removed"}
+    else:
+        new_holiday = CompanyHoliday(
+            company_id=company_id,
+            date=target_date,
+            name=payload.name or "Company Holiday"
+        )
+        db.add(new_holiday)
+        db.commit()
+        return {"status": "success", "action": "added", "message": "Holiday added"}

@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from datetime import datetime, timedelta
 import pytz
 from typing import List, Optional
 from pydantic import BaseModel
 from jose import jwt
 
-from app.db.models import Company, Employee, Attendance, DepartmentSession, LocationLog, ShortLeave
+from app.db.models import Company, Employee, Attendance, DepartmentSession, LocationLog, ShortLeave, CompanyHoliday # ✅ Added CompanyHoliday
 from app.db.database import get_db
 from app.schemas.schemas import AttendanceMark, TrackingStart, LocationUpdate, EmergencyCheckout, ShortLeaveRequest
 from app.routers.auth import oauth2_scheme
@@ -30,7 +31,6 @@ class AttendanceHistoryItem(BaseModel):
 
 class EmployeeActionPayload(BaseModel):
     employee_id: str
-
 
 # --- HELPER: LOCAL TIMEZONE CONVERTER ---
 def get_local_now(company: Company) -> datetime:
@@ -233,7 +233,7 @@ def emergency_checkout(
     return {"status": "success", "message": "Emergency checkout recorded"}
 
 # ==========================================
-# ✅ THE EASY WAY: JUST GRAB THE LAST ROW
+# LATE REASON ENDPOINT
 # ==========================================
 @router.post("/api/submit_excuse")
 def submit_excuse(
@@ -242,28 +242,23 @@ def submit_excuse(
     user: dict = Depends(get_current_employee)
 ):
     emp_id = user["sub"]
+    try:
+        latest_id_query = text("SELECT id FROM attendance WHERE employee_id = :emp_id ORDER BY id DESC LIMIT 1")
+        result = db.execute(latest_id_query, {"emp_id": emp_id}).fetchone()
 
-    # Get today's attendance
-    att = db.query(Attendance).filter(
-        Attendance.employee_id == emp_id,
-        Attendance.date_only == datetime.utcnow().date()
-    ).first()
+        if not result:
+            raise HTTPException(status_code=404, detail="No record found")
 
-    if not att:
-        raise HTTPException(404, "No attendance record for today")
-
-    if att.status not in ("Late", "Super Late"):
-        raise HTTPException(400, "Late reason allowed only for Late or Super Late")
-
-    att.late_reason = payload.reason
-    db.commit()
-    db.refresh(att)
-
-    return {
-        "status": "success",
-        "message": "Late reason saved successfully"
-    }
-
+        update_query = text("UPDATE attendance SET late_reason = :reason WHERE id = :id")
+        db.execute(update_query, {"reason": payload.reason, "id": result[0]})
+        
+        db.commit()
+        return {"status": "success", "message": "Late reason strictly saved!"}
+    
+    except Exception as e:
+        db.rollback()
+        print(f"CRITICAL ERROR: {str(e)}")
+        raise HTTPException(status_code=500, detail="Database submission failed")
 
 @router.post("/api/short_leave/request")
 def request_short_leave(
@@ -451,3 +446,24 @@ def get_my_attendance(
         Attendance.employee_id == current_user["sub"]
     ).order_by(Attendance.timestamp.desc()).limit(60).all()
     return logs
+
+
+# ==========================================
+# ✅ READ-ONLY HOLIDAY ENDPOINT FOR EMPLOYEES
+# ==========================================
+@router.get("/api/holidays")
+def get_employee_holidays(
+    db: Session = Depends(get_db), 
+    user: dict = Depends(get_current_employee)
+):
+    emp = db.query(Employee).filter(Employee.employee_id == user["sub"]).first()
+    if not emp: 
+        raise HTTPException(404, "User not found")
+        
+    company = db.query(Company).filter(Company.id == emp.company_id).first()
+    holidays = db.query(CompanyHoliday).filter(CompanyHoliday.company_id == emp.company_id).all()
+    
+    return {
+        "weekly_holidays": company.weekly_holidays or [],
+        "single_dates": [{"date": h.date.strftime("%Y-%m-%d"), "name": h.name} for h in holidays]
+    }

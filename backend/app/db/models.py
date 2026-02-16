@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, DateTime, Date, ForeignKey, Boolean, Float
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.types import JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -26,19 +27,19 @@ class Company(Base):
     office_lng = Column(String, default="90.4125")
     office_radius = Column(String, default="50")
 
-    # WORK SCHEDULE
-    work_start_time = Column(String, default="09:00") # Format "HH:MM"
-    work_end_time = Column(String, default="17:00")   # Format "HH:MM"
-    
-    # TIMEZONE (STEP 0)
+    # Work Schedule & Timezone
+    work_start_time = Column(String, default="09:00") 
+    work_end_time = Column(String, default="17:00")   
     timezone = Column(String, default="UTC")
-    
-    # ✅ NEW: SUPER LATE THRESHOLD (STEP 4) - Stored in minutes
     super_late_threshold = Column(Integer, default=30)
+    
+    # ✅ NEW: Weekly Recurring Holidays (e.g., ["Friday", "Saturday"])
+    weekly_holidays = Column(JSON, default=[])
     
     admins = relationship("CompanyAdmin", back_populates="company")
     employees = relationship("Employee", back_populates="company")
     sessions = relationship("DepartmentSession", back_populates="company")
+    holidays = relationship("CompanyHoliday", back_populates="company") # Relationship to single-date holidays
 
 class CompanyAdmin(Base):
     __tablename__ = "company_admins"
@@ -117,19 +118,19 @@ class Attendance(Base):
     source = Column(String, default="MOBILE") 
     device_id = Column(String, nullable=True)
 
-    type = Column(String, nullable=True)       # 'check_in' or 'check_out'
-    method = Column(String, nullable=True)     # 'MANUAL_ADMIN', 'GPS', etc.
-    image_url = Column(String, nullable=True)  # Used for notes
+    type = Column(String, nullable=True)       
+    method = Column(String, nullable=True)     
+    image_url = Column(String, nullable=True)  
 
-    # TRACKING TIMES (STEP 1)
+    # TRACKING TIMES 
     door_unlock_time = Column(DateTime, nullable=True)
     check_out_enabled_time = Column(DateTime, nullable=True)
 
-    # EMERGENCY CHECK-OUT (STEP 2)
+    # EMERGENCY & LATE REASONS
     is_emergency_checkout = Column(Boolean, default=False)
     emergency_checkout_reason = Column(String, nullable=True)
+    late_reason = Column(String, nullable=True)
 
-# SHORT LEAVE MODEL (STEP 3)
 class ShortLeave(Base):
     __tablename__ = "short_leaves"
     id = Column(Integer, primary_key=True, index=True)
@@ -147,23 +148,30 @@ class HardwareDevice(Base):
     id = Column(Integer, primary_key=True)
     
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
-    
     device_uid = Column(String, unique=True, index=True)
     device_type = Column(String)
     location = Column(String)
     secret_key = Column(String)
     active = Column(Boolean, default=True)
-    
     company = relationship("Company")
 
 class DoorEvent(Base):
     __tablename__ = "door_events"
     id = Column(Integer, primary_key=True)
-    
     company_id = Column(Integer, ForeignKey("companies.id"), nullable=False)
     employee_id = Column(Integer, ForeignKey("employees.id"), nullable=True)
-    
     event_type = Column(String)
     trigger_reason = Column(String)
     device_id = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+# --- 4. HOLIDAY MODELS (NEW) ---
+
+class CompanyHoliday(Base):
+    __tablename__ = "company_holidays"
+    id = Column(Integer, primary_key=True)
+    company_id = Column(Integer, ForeignKey("companies.id", ondelete="CASCADE"), nullable=False)
+    date = Column(Date, nullable=False)
+    name = Column(String, nullable=True)  # Optional: e.g., "National Holiday"
+    
+    company = relationship("Company", back_populates="holidays")

@@ -80,7 +80,6 @@ export const companyService = {
   getDevices: () => api.get('/company/devices'),
   emergencyOpen: (deviceId, reason) => api.post('/company/devices/emergency-open', { device_id: deviceId, reason }),
 
-  // ✅ NEW: FETCH SAVED SETTINGS FROM DATABASE
   getSettings: () => api.get('/company/settings'),
 
   updateSettings: (lat, lng, radius) => {
@@ -113,6 +112,11 @@ export const companyService = {
   getAllAttendance: () => api.get('/company/audit/attendance'),
   getAllShortLeaves: () => api.get('/company/audit/short_leaves'),
   getAllDoorEvents: () => api.get('/company/audit/door_events'),
+
+  // ✅ NEW: HOLIDAY MANAGEMENT ENDPOINTS
+  getHolidays: () => api.get('/company/holidays'),
+  updateWeeklyHolidays: (daysArray) => api.post('/company/holidays/weekly', { days: daysArray }),
+  toggleHoliday: (dateString, name = "Holiday") => api.post('/company/holidays/toggle', { date: dateString, name: name }),
 };
 
 export const employeeService = {

@@ -78,7 +78,6 @@ class EmergencyCheckout(BaseModel):
     employee_id: str
     reason: str
 
-# ✅ NEW: LATE REASON SUBMISSION
 class SubmitExcuse(BaseModel):
     reason: str
 
@@ -108,4 +107,14 @@ class EmergencyOpen(BaseModel):
 
 class ScheduleUpdate(BaseModel):
     start_time: str 
-    end_time: str
+    end_time: str   
+
+# ==========================================
+# ✅ 6. HOLIDAY MANAGEMENT (NEW)
+# ==========================================
+class WeeklyHolidaysUpdate(BaseModel):
+    days: List[str]
+
+class HolidayToggle(BaseModel):
+    date: str 
+    name: Optional[str] = None
