@@ -7,7 +7,7 @@ import 'react-calendar/dist/Calendar.css';
 import { 
   Building2, Users, MapPin, History, LogOut, 
   Trash2, Power, UserCheck, ShieldAlert, Fingerprint, 
-  Lock, Settings, Clock, X, Crosshair, ClipboardList, Filter, CalendarDays
+  Lock, Settings, Clock, X, Crosshair, ClipboardList, Filter, CalendarDays, Search
 } from 'lucide-react';
 
 // --- EXACT APP COLORS ---
@@ -26,6 +26,9 @@ const CompanyDashboard = () => {
   const [newEmp, setNewEmp] = useState({ employee_id: '', name: '', password: '', role: 'Staff' });
   const [manualAtt, setManualAtt] = useState({ employee_id: '', type: 'check_in', date: '', time: '' });
   
+  // Search State (NEW)
+  const [searchQuery, setSearchQuery] = useState('');
+
   // Settings & Schedule
   const [settings, setSettings] = useState({ lat: '', lng: '', radius: '50' });
   const [schedule, setSchedule] = useState({ start: '09:00', end: '17:00', timezone: 'UTC', superLateThreshold: 30 });
@@ -160,16 +163,6 @@ const CompanyDashboard = () => {
     return false;
   };
 
-  // ✅ HOLIDAY CALENDAR STYLING (PERFECT CIRCLES)
-  const getHolidayTileClassName = ({ date, view }) => {
-    if (view === 'month') {
-      if (isHoliday(date)) {
-        return `!bg-[#99CCFF] !text-[#003366] font-bold shadow-sm border border-[#66B2FF]`;
-      }
-    }
-    return null;
-  };
-
   // --- STANDARD FUNCTIONS ---
   const handleSaveSchedule = async (e) => {
     e.preventDefault();
@@ -282,7 +275,14 @@ const CompanyDashboard = () => {
     }
   };
 
-  // ✅ STAFF ATTENDANCE CALENDAR STYLING (PERFECT CIRCLES & SYNCED COLORS)
+  // ✅ PERFECT BULLETPROOF CALENDAR CLASSES
+  const getHolidayTileClassName = ({ date, view }) => {
+    if (view === 'month') {
+      if (isHoliday(date)) return 'tile-holiday';
+    }
+    return null;
+  };
+
   const getAttendanceTileClassName = ({ date, view }) => {
     if (view === 'month') {
       const today = new Date();
@@ -299,18 +299,14 @@ const CompanyDashboard = () => {
         const isSuperLate = dayLogs.some(log => log.status === 'Super Late');
         const isLate = dayLogs.some(log => log.status === 'Late');
         
-        if (isSuperLate) return `!bg-[#CCCC00] !text-black font-bold shadow-sm`; 
-        if (isLate) return `!bg-[#FFFF66] !text-black font-bold shadow-sm`;      
-        return `!bg-[#009933] !text-white font-bold shadow-sm`;                  
+        if (isSuperLate) return 'tile-super-late'; 
+        if (isLate) return 'tile-late';      
+        return 'tile-present';                  
       }
 
-      if (isHoliday(date)) {
-        return `!bg-[#99CCFF] !text-[#003366] font-bold shadow-sm border border-[#66B2FF]`;
-      }
+      if (isHoliday(date)) return 'tile-holiday';
 
-      if (date < today) {
-        return `!bg-[#CC0000] !text-white font-bold shadow-sm`; 
-      }
+      if (date < today) return 'tile-absent'; 
     }
     return null;
   };
@@ -320,6 +316,7 @@ const CompanyDashboard = () => {
     return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Filter Data
   const filteredAttendance = auditData.attendance.filter(log => {
     if (attFilter === 'late') return log.status === 'Late';
     if (attFilter === 'super_late') return log.status === 'Super Late';
@@ -327,34 +324,93 @@ const CompanyDashboard = () => {
     return true; 
   });
 
+  const filteredEmployeesList = employees.filter(emp => 
+    emp.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    emp.employee_id.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   const weekDaysList = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans relative">
       
-      {/* ✅ INJECT CUSTOM CSS ONCE FOR ALL CALENDARS */}
+      {/* ✅ UPGRADED PURE CSS FOR PERFECT CALENDAR SIZING AND COLORS */}
       <style>{`
-        .custom-calendar .react-calendar__month-view__days {
-          gap: 4px 0; 
+        /* Make Calendar Box Much Larger */
+        .custom-calendar {
+          width: 100% !important;
+          max-width: 800px; /* Big and readable */
+          margin: 0 auto;
+          background: white;
+          padding: 1.5rem;
+          border-radius: 1rem;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
         }
+        .custom-calendar .react-calendar__navigation {
+          margin-bottom: 1.5rem;
+        }
+        .custom-calendar .react-calendar__navigation button {
+          font-weight: 800;
+          font-size: 1.25rem;
+          color: #1f2937;
+        }
+        /* Align Weekdays perfectly */
+        .custom-calendar .react-calendar__month-view__weekdays {
+          text-transform: uppercase;
+          font-weight: 800;
+          font-size: 0.8rem;
+          color: #6b7280;
+          padding-bottom: 1rem;
+        }
+        .custom-calendar .react-calendar__month-view__weekdays__weekday {
+          padding: 0.5rem;
+        }
+        /* Force Grid to perfectly align dates under weekdays */
+        .custom-calendar .react-calendar__month-view__days {
+          display: grid !important;
+          grid-template-columns: repeat(7, 1fr) !important;
+          gap: 12px 0; 
+        }
+        /* Force 48x48 Perfectly Round Circles */
         .custom-calendar .react-calendar__tile {
-          aspect-ratio: 1/1; 
+          height: 48px !important;
+          width: 48px !important;
+          max-width: 48px !important;
+          flex: none !important;
           border-radius: 50% !important; 
           display: flex;
           align-items: center;
           justify-content: center;
-          max-width: 44px; 
           margin: 0 auto; 
           padding: 0;
+          font-size: 1rem;
+          font-weight: 500;
+          transition: 0.2s ease-in-out;
         }
+        
+        /* THE EXACT COLOR CLASSES */
+        .tile-present { background-color: ${COLOR_PRESENT} !important; color: white !important; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
+        .tile-late { background-color: ${COLOR_LATE} !important; color: black !important; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.15); border: 1px solid #d1d5db; }
+        .tile-super-late { background-color: ${COLOR_SUPER_LATE} !important; color: black !important; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
+        .tile-holiday { background-color: ${COLOR_HOLIDAY} !important; color: #003366 !important; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.15); border: 1px solid #66B2FF; }
+        .tile-absent { background-color: ${COLOR_ABSENT} !important; color: white !important; font-weight: bold; box-shadow: 0 2px 4px rgba(0,0,0,0.15); }
+
+        /* Remove default active/hover blue backgrounds */
+        .custom-calendar .react-calendar__tile:enabled:hover,
+        .custom-calendar .react-calendar__tile:enabled:focus,
         .custom-calendar .react-calendar__tile--active {
-          background: transparent !important;
-          color: inherit !important;
+          background: #f3f4f6 !important;
+          color: black;
         }
-        .custom-calendar .react-calendar__tile--active:enabled:hover,
-        .custom-calendar .react-calendar__tile--active:enabled:focus {
-          background: transparent !important;
-        }
+        
+        /* Re-apply colored states on hover to prevent override */
+        .custom-calendar .tile-present:enabled:hover { filter: brightness(0.9); }
+        .custom-calendar .tile-late:enabled:hover { filter: brightness(0.9); }
+        .custom-calendar .tile-super-late:enabled:hover { filter: brightness(0.9); }
+        .custom-calendar .tile-holiday:enabled:hover { filter: brightness(0.9); }
+        .custom-calendar .tile-absent:enabled:hover { filter: brightness(0.9); }
+
+        /* Current Date marker (Underline instead of Blue circle) */
         .custom-calendar .react-calendar__tile--now {
           background: transparent !important;
         }
@@ -363,7 +419,7 @@ const CompanyDashboard = () => {
           text-decoration: underline;
           text-underline-offset: 4px;
           text-decoration-color: #111827; 
-          text-decoration-thickness: 2px;
+          text-decoration-thickness: 3px;
         }
       `}</style>
 
@@ -389,7 +445,7 @@ const CompanyDashboard = () => {
           <button onClick={() => setActiveTab('settings')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'settings' ? 'bg-slate-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
             <Settings size={18}/> Office Settings
           </button>
-          <button onClick={() => setActiveTab('holidays')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'holidays' ? `bg-[${COLOR_HOLIDAY}] text-[#003366]` : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
+          <button onClick={() => setActiveTab('holidays')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'holidays' ? 'bg-[#99CCFF] text-[#003366]' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
             <CalendarDays size={18}/> Holidays
           </button>
           <button onClick={() => setActiveTab('audit')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'audit' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
@@ -403,55 +459,76 @@ const CompanyDashboard = () => {
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
               <h2 className="font-bold mb-4 text-slate-700">Add New Staff</h2>
               <form onSubmit={handleAddEmployee} className="space-y-4">
-                <input placeholder="ID (e.g. EMP01)" className="w-full border p-2 rounded" value={newEmp.employee_id} onChange={e => setNewEmp({...newEmp, employee_id: e.target.value})} />
-                <input placeholder="Name" className="w-full border p-2 rounded" value={newEmp.name} onChange={e => setNewEmp({...newEmp, name: e.target.value})} />
-                <input placeholder="Password" type="password" className="w-full border p-2 rounded" value={newEmp.password} onChange={e => setNewEmp({...newEmp, password: e.target.value})} />
+                {/* ✅ MANDATORY FIELDS ADDED */}
+                <input required placeholder="ID (e.g. EMP01)" className="w-full border p-2 rounded" value={newEmp.employee_id} onChange={e => setNewEmp({...newEmp, employee_id: e.target.value})} />
+                <input required placeholder="Name" className="w-full border p-2 rounded" value={newEmp.name} onChange={e => setNewEmp({...newEmp, name: e.target.value})} />
+                <input required placeholder="Password" type="password" className="w-full border p-2 rounded" value={newEmp.password} onChange={e => setNewEmp({...newEmp, password: e.target.value})} />
                 <select className="w-full border p-2 rounded" value={newEmp.role} onChange={e => setNewEmp({...newEmp, role: e.target.value})}>
                   <option value="Staff">Office Staff</option>
                   <option value="Marketing">Field Marketing</option>
                 </select>
-                <button className="w-full bg-blue-600 text-white font-bold py-2 rounded">Register</button>
+                <button className="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">Register Staff</button>
               </form>
             </div>
 
             <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-              <h2 className="font-bold mb-4 text-slate-700">Staff List</h2>
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-slate-500">
-                  <tr>
-                    <th className="p-3">ID</th>
-                    <th className="p-3">Name</th>
-                    <th className="p-3">Status</th>
-                    <th className="p-3 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {employees.map(emp => (
-                    <tr key={emp.id} className="border-b hover:bg-slate-50">
-                      <td className="p-3 font-mono">{emp.employee_id}</td>
-                      <td className="p-3">{emp.name}</td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-xs ${emp.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                          {emp.status || 'active'}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right flex justify-end gap-2">
-                        <button onClick={() => openHistory(emp)} className="p-2 rounded text-blue-600 bg-blue-50 hover:bg-blue-100" title="View Calendar">
-                          <History size={16}/>
-                        </button>
-                        <button onClick={() => handleToggleStatus(emp)} 
-                          title={emp.status === 'suspended' ? "Activate" : "Suspend"}
-                          className={`p-2 rounded ${emp.status === 'suspended' ? 'text-green-600 bg-green-50' : 'text-amber-600 bg-amber-50'}`}>
-                          {emp.status === 'suspended' ? <UserCheck size={16}/> : <Power size={16}/>}
-                        </button>
-                        <button onClick={() => handleDelete(emp.id)} className="p-2 rounded text-red-600 bg-red-50 hover:bg-red-100">
-                          <Trash2 size={16}/>
-                        </button>
-                      </td>
+              <div className="flex justify-between items-center mb-4 gap-4">
+                <h2 className="font-bold text-slate-700">Staff List</h2>
+                {/* ✅ SEARCH BAR IMPLEMENTED */}
+                <div className="relative w-full max-w-xs">
+                  <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                  <input 
+                    type="text" 
+                    placeholder="Search by ID or Name..." 
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full border border-slate-300 pl-10 p-2 rounded bg-slate-50 text-sm focus:outline-none focus:border-blue-500"
+                  />
+                </div>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm whitespace-nowrap">
+                  <thead className="bg-slate-50 text-slate-500">
+                    <tr>
+                      <th className="p-3">ID</th>
+                      <th className="p-3">Name</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-right">Actions</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {filteredEmployeesList.length === 0 ? (
+                      <tr><td colSpan="4" className="text-center p-4 text-slate-400">No staff found.</td></tr>
+                    ) : (
+                      filteredEmployeesList.map(emp => (
+                        <tr key={emp.id} className="border-b hover:bg-slate-50">
+                          <td className="p-3 font-mono font-bold text-slate-700">{emp.employee_id}</td>
+                          <td className="p-3">{emp.name}</td>
+                          <td className="p-3">
+                            <span className={`px-2 py-0.5 rounded text-xs font-bold uppercase ${emp.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                              {emp.status || 'active'}
+                            </span>
+                          </td>
+                          <td className="p-3 text-right flex justify-end gap-2">
+                            <button onClick={() => openHistory(emp)} className="p-2 rounded text-blue-600 bg-blue-50 hover:bg-blue-100" title="View Calendar">
+                              <History size={16}/>
+                            </button>
+                            <button onClick={() => handleToggleStatus(emp)} 
+                              title={emp.status === 'suspended' ? "Activate" : "Suspend"}
+                              className={`p-2 rounded ${emp.status === 'suspended' ? 'text-green-600 bg-green-50' : 'text-amber-600 bg-amber-50'}`}>
+                              {emp.status === 'suspended' ? <UserCheck size={16}/> : <Power size={16}/>}
+                            </button>
+                            <button onClick={() => handleDelete(emp.id)} className="p-2 rounded text-red-600 bg-red-50 hover:bg-red-100">
+                              <Trash2 size={16}/>
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -580,7 +657,7 @@ const CompanyDashboard = () => {
             
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
               <h2 className="font-bold text-xl mb-2 text-slate-800 flex items-center gap-2">
-                <CalendarDays className={`text-[${COLOR_HOLIDAY}]`}/> Weekly Holidays
+                <CalendarDays style={{ color: COLOR_HOLIDAY }}/> Weekly Holidays
               </h2>
               <p className="text-slate-500 text-sm mb-6">Select the days your company is closed every week. These days will automatically be marked as holidays.</p>
               
@@ -591,10 +668,9 @@ const CompanyDashboard = () => {
                     <button
                       key={day}
                       onClick={() => handleToggleWeeklyHoliday(day)}
+                      style={isActive ? { backgroundColor: COLOR_HOLIDAY, color: '#003366', borderColor: '#66B2FF' } : {}}
                       className={`px-5 py-2.5 rounded-lg font-bold text-sm transition-all border ${
-                        isActive 
-                        ? `bg-[${COLOR_HOLIDAY}] text-[#003366] border-[#66B2FF] shadow-sm` 
-                        : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
+                        isActive ? 'shadow-sm' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
                       {day}
@@ -607,22 +683,23 @@ const CompanyDashboard = () => {
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
               <div className="mb-6">
                 <h2 className="font-bold text-xl mb-2 text-slate-800 flex items-center gap-2">
-                  <CalendarDays className={`text-[${COLOR_HOLIDAY}]`}/> Single-Date Holidays
+                  <CalendarDays style={{ color: COLOR_HOLIDAY }}/> Single-Date Holidays
                 </h2>
                 <p className="text-slate-500 text-sm">Click any date on the calendar to mark it as a specific holiday. Click again to remove it.</p>
               </div>
 
-              <div className="calendar-wrapper custom-calendar max-w-2xl mx-auto">
+              {/* ✅ LARGER, CENTERED HOLIDAY CALENDAR */}
+              <div className="custom-calendar border border-slate-100">
                 <Calendar 
                   onClickDay={handleToggleSingleHoliday} 
                   tileClassName={getHolidayTileClassName} 
-                  className="w-full border-none font-sans text-sm shadow-md rounded-xl p-4 bg-slate-50"
+                  className="font-sans text-sm"
                 />
               </div>
 
-              <div className="mt-6 flex gap-4 text-sm font-bold justify-center">
+              <div className="mt-6 flex gap-6 text-sm font-bold justify-center">
                 <div className="flex items-center gap-2 text-slate-600">
-                  <span className={`w-4 h-4 bg-[${COLOR_HOLIDAY}] border border-[#66B2FF] rounded-full block`}></span> Holiday
+                  <span style={{ backgroundColor: COLOR_HOLIDAY, borderColor: '#66B2FF' }} className="w-4 h-4 border rounded-full block"></span> Holiday
                 </div>
                 <div className="flex items-center gap-2 text-slate-600">
                   <span className="w-4 h-4 bg-white border border-slate-200 rounded-full block"></span> Work Day
@@ -675,10 +752,13 @@ const CompanyDashboard = () => {
                           <td className="p-3 font-bold text-slate-700">{log.date}</td>
                           <td className="p-3 font-mono">{log.employee_id}</td>
                           <td className="p-3">
-                            <span className={`px-2 py-1 rounded text-xs font-bold ${
-                              log.status === 'Super Late' ? `bg-[${COLOR_SUPER_LATE}] text-black` :
-                              log.status === 'Late' ? `bg-[${COLOR_LATE}] text-black` : `bg-[${COLOR_PRESENT}] text-white`
-                            }`}>
+                            {/* STATUS BADGES WITH NEW COLORS */}
+                            <span className="px-2 py-1 rounded text-xs font-bold" style={{
+                              backgroundColor: log.status === 'Super Late' ? COLOR_SUPER_LATE :
+                                               log.status === 'Late' ? COLOR_LATE : COLOR_PRESENT,
+                              color: log.status === 'Present' ? 'white' : 'black',
+                              border: log.status === 'Late' ? '1px solid #d1d5db' : 'none'
+                            }}>
                               {log.status}
                             </span>
                           </td>
@@ -763,33 +843,33 @@ const CompanyDashboard = () => {
 
       </div>
 
-      {/* ✅ STAFF HISTORY MODAL (WITH NEW CSS & COLORS) */}
+      {/* ✅ LARGER STAFF HISTORY MODAL WITH PERFECT CALENDAR */}
       {showCalendar && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl relative">
-            <button onClick={() => setShowCalendar(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
-              <X size={24}/>
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-8 rounded-2xl w-full max-w-3xl shadow-2xl relative">
+            <button onClick={() => setShowCalendar(false)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500 transition-colors">
+              <X size={28}/>
             </button>
             
-            <div className="mb-4">
-              <h2 className="text-xl font-bold text-slate-800">{selectedEmp?.name}</h2>
-              <p className="text-slate-500 text-sm">Attendance History</p>
+            <div className="mb-6 text-center">
+              <h2 className="text-2xl font-bold text-slate-800">{selectedEmp?.name}</h2>
+              <p className="text-slate-500 text-sm font-mono mt-1">{selectedEmp?.employee_id} • Attendance History</p>
             </div>
 
-            <div className="calendar-wrapper custom-calendar">
+            <div className="custom-calendar border border-slate-100">
               <Calendar 
                 tileClassName={getAttendanceTileClassName}
-                className="w-full border-none shadow-none text-sm"
+                className="font-sans text-sm"
               />
             </div>
 
-            {/* ✅ EXACT LEGEND MATCHING APP & EMPLOYEE DASHBOARD */}
-            <div className="mt-4 flex gap-4 text-xs font-bold justify-center flex-wrap">
-              <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_PRESENT}] rounded-full`}></span> Present</div>
-              <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_LATE}] border border-slate-300 rounded-full`}></span> Late</div>
-              <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_SUPER_LATE}] rounded-full`}></span> Super Late</div>
-              <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_HOLIDAY}] border border-[#66B2FF] rounded-full`}></span> Holiday</div>
-              <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_ABSENT}] rounded-full`}></span> Absent</div>
+            {/* ✅ EXACT LEGEND MATCHING APP */}
+            <div className="mt-8 flex gap-6 text-sm font-bold justify-center flex-wrap">
+              <div className="flex items-center gap-2"><span style={{ backgroundColor: COLOR_PRESENT }} className="w-4 h-4 rounded-full"></span> Present</div>
+              <div className="flex items-center gap-2"><span style={{ backgroundColor: COLOR_LATE }} className="w-4 h-4 border border-slate-300 rounded-full"></span> Late</div>
+              <div className="flex items-center gap-2"><span style={{ backgroundColor: COLOR_SUPER_LATE }} className="w-4 h-4 rounded-full"></span> Super Late</div>
+              <div className="flex items-center gap-2"><span style={{ backgroundColor: COLOR_HOLIDAY, borderColor: '#66B2FF' }} className="w-4 h-4 border rounded-full"></span> Holiday</div>
+              <div className="flex items-center gap-2"><span style={{ backgroundColor: COLOR_ABSENT }} className="w-4 h-4 rounded-full"></span> Absent</div>
             </div>
           </div>
         </div>
