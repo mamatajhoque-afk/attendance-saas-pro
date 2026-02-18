@@ -10,6 +10,13 @@ import {
   Lock, Settings, Clock, X, Crosshair, ClipboardList, Filter, CalendarDays
 } from 'lucide-react';
 
+// --- EXACT APP COLORS ---
+const COLOR_PRESENT = '#009933'; 
+const COLOR_LATE = '#FFFF66';    
+const COLOR_SUPER_LATE = '#CCCC00'; 
+const COLOR_ABSENT = '#CC0000';  
+const COLOR_HOLIDAY = '#99CCFF'; 
+
 const CompanyDashboard = () => {
   const [activeTab, setActiveTab] = useState('staff'); 
   const [employees, setEmployees] = useState([]);
@@ -44,16 +51,14 @@ const CompanyDashboard = () => {
     loadEmployees();
     loadDevices(); 
     loadSettings(); 
-    loadHolidays(); // ✅ Now loads immediately so the Staff calendar popup has the data!
+    loadHolidays(); 
   }, []);
 
-  // Load Tab-Specific Data
   useEffect(() => {
     if (activeTab === 'audit') loadAuditData();
   }, [activeTab]);
 
   // --- API FUNCTIONS ---
-
   const loadSettings = async () => {
     try {
       const res = await companyService.getSettings();
@@ -91,7 +96,6 @@ const CompanyDashboard = () => {
     }
   };
 
-  // ✅ HOLIDAY FUNCTIONS
   const loadHolidays = async () => {
     try {
       const res = await companyService.getHolidays();
@@ -156,17 +160,17 @@ const CompanyDashboard = () => {
     return false;
   };
 
+  // ✅ HOLIDAY CALENDAR STYLING (PERFECT CIRCLES)
   const getHolidayTileClassName = ({ date, view }) => {
     if (view === 'month') {
       if (isHoliday(date)) {
-        return 'bg-purple-100 text-purple-700 font-bold rounded-lg border border-purple-300';
+        return `!bg-[#99CCFF] !text-[#003366] font-bold shadow-sm border border-[#66B2FF]`;
       }
     }
     return null;
   };
 
   // --- STANDARD FUNCTIONS ---
-
   const handleSaveSchedule = async (e) => {
     e.preventDefault();
     try {
@@ -278,7 +282,7 @@ const CompanyDashboard = () => {
     }
   };
 
-  // ✅ UPDATED: Exact same logic as the Employee Dashboard
+  // ✅ STAFF ATTENDANCE CALENDAR STYLING (PERFECT CIRCLES & SYNCED COLORS)
   const getAttendanceTileClassName = ({ date, view }) => {
     if (view === 'month') {
       const today = new Date();
@@ -295,17 +299,17 @@ const CompanyDashboard = () => {
         const isSuperLate = dayLogs.some(log => log.status === 'Super Late');
         const isLate = dayLogs.some(log => log.status === 'Late');
         
-        if (isSuperLate) return 'bg-[#B8860B] text-white font-bold rounded-md'; 
-        if (isLate) return 'bg-[#FFEB3B] text-black font-bold rounded-md';      
-        return 'bg-[#006400] text-white font-bold rounded-md';                  
+        if (isSuperLate) return `!bg-[#CCCC00] !text-black font-bold shadow-sm`; 
+        if (isLate) return `!bg-[#FFFF66] !text-black font-bold shadow-sm`;      
+        return `!bg-[#009933] !text-white font-bold shadow-sm`;                  
       }
 
       if (isHoliday(date)) {
-        return 'bg-purple-100 text-purple-700 font-bold rounded-md border border-purple-200';
+        return `!bg-[#99CCFF] !text-[#003366] font-bold shadow-sm border border-[#66B2FF]`;
       }
 
       if (date < today) {
-        return 'bg-[#8B0000] text-white font-bold rounded-md'; 
+        return `!bg-[#CC0000] !text-white font-bold shadow-sm`; 
       }
     }
     return null;
@@ -327,6 +331,42 @@ const CompanyDashboard = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans relative">
+      
+      {/* ✅ INJECT CUSTOM CSS ONCE FOR ALL CALENDARS */}
+      <style>{`
+        .custom-calendar .react-calendar__month-view__days {
+          gap: 4px 0; 
+        }
+        .custom-calendar .react-calendar__tile {
+          aspect-ratio: 1/1; 
+          border-radius: 50% !important; 
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          max-width: 44px; 
+          margin: 0 auto; 
+          padding: 0;
+        }
+        .custom-calendar .react-calendar__tile--active {
+          background: transparent !important;
+          color: inherit !important;
+        }
+        .custom-calendar .react-calendar__tile--active:enabled:hover,
+        .custom-calendar .react-calendar__tile--active:enabled:focus {
+          background: transparent !important;
+        }
+        .custom-calendar .react-calendar__tile--now {
+          background: transparent !important;
+        }
+        .custom-calendar .react-calendar__tile--now abbr {
+          font-weight: 900 !important;
+          text-decoration: underline;
+          text-underline-offset: 4px;
+          text-decoration-color: #111827; 
+          text-decoration-thickness: 2px;
+        }
+      `}</style>
+
       <div className="max-w-7xl mx-auto">
         {/* HEADER */}
         <header className="flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
@@ -349,7 +389,7 @@ const CompanyDashboard = () => {
           <button onClick={() => setActiveTab('settings')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'settings' ? 'bg-slate-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
             <Settings size={18}/> Office Settings
           </button>
-          <button onClick={() => setActiveTab('holidays')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'holidays' ? 'bg-purple-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
+          <button onClick={() => setActiveTab('holidays')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'holidays' ? `bg-[${COLOR_HOLIDAY}] text-[#003366]` : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
             <CalendarDays size={18}/> Holidays
           </button>
           <button onClick={() => setActiveTab('audit')} className={`whitespace-nowrap px-4 py-2 rounded-lg font-bold flex items-center gap-2 ${activeTab === 'audit' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-600 hover:bg-slate-100'}`}>
@@ -540,7 +580,7 @@ const CompanyDashboard = () => {
             
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
               <h2 className="font-bold text-xl mb-2 text-slate-800 flex items-center gap-2">
-                <CalendarDays className="text-purple-600"/> Weekly Holidays
+                <CalendarDays className={`text-[${COLOR_HOLIDAY}]`}/> Weekly Holidays
               </h2>
               <p className="text-slate-500 text-sm mb-6">Select the days your company is closed every week. These days will automatically be marked as holidays.</p>
               
@@ -553,7 +593,7 @@ const CompanyDashboard = () => {
                       onClick={() => handleToggleWeeklyHoliday(day)}
                       className={`px-5 py-2.5 rounded-lg font-bold text-sm transition-all border ${
                         isActive 
-                        ? 'bg-purple-100 text-purple-700 border-purple-300 shadow-sm' 
+                        ? `bg-[${COLOR_HOLIDAY}] text-[#003366] border-[#66B2FF] shadow-sm` 
                         : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
                       }`}
                     >
@@ -567,9 +607,9 @@ const CompanyDashboard = () => {
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
               <div className="mb-6">
                 <h2 className="font-bold text-xl mb-2 text-slate-800 flex items-center gap-2">
-                  <CalendarDays className="text-purple-600"/> Single-Date Holidays
+                  <CalendarDays className={`text-[${COLOR_HOLIDAY}]`}/> Single-Date Holidays
                 </h2>
-                <p className="text-slate-500 text-sm">Click any date on the calendar to mark it as a specific holiday (e.g. National Holidays). Click again to remove it.</p>
+                <p className="text-slate-500 text-sm">Click any date on the calendar to mark it as a specific holiday. Click again to remove it.</p>
               </div>
 
               <div className="calendar-wrapper custom-calendar max-w-2xl mx-auto">
@@ -582,10 +622,10 @@ const CompanyDashboard = () => {
 
               <div className="mt-6 flex gap-4 text-sm font-bold justify-center">
                 <div className="flex items-center gap-2 text-slate-600">
-                  <span className="w-4 h-4 bg-purple-100 border border-purple-300 rounded-md block"></span> Holiday
+                  <span className={`w-4 h-4 bg-[${COLOR_HOLIDAY}] border border-[#66B2FF] rounded-full block`}></span> Holiday
                 </div>
                 <div className="flex items-center gap-2 text-slate-600">
-                  <span className="w-4 h-4 bg-white border border-slate-200 rounded-md block"></span> Work Day
+                  <span className="w-4 h-4 bg-white border border-slate-200 rounded-full block"></span> Work Day
                 </div>
               </div>
             </div>
@@ -636,8 +676,8 @@ const CompanyDashboard = () => {
                           <td className="p-3 font-mono">{log.employee_id}</td>
                           <td className="p-3">
                             <span className={`px-2 py-1 rounded text-xs font-bold ${
-                              log.status === 'Super Late' ? 'bg-[#B8860B] text-white' :
-                              log.status === 'Late' ? 'bg-[#FFEB3B] text-black' : 'bg-[#006400] text-white'
+                              log.status === 'Super Late' ? `bg-[${COLOR_SUPER_LATE}] text-black` :
+                              log.status === 'Late' ? `bg-[${COLOR_LATE}] text-black` : `bg-[${COLOR_PRESENT}] text-white`
                             }`}>
                               {log.status}
                             </span>
@@ -723,7 +763,7 @@ const CompanyDashboard = () => {
 
       </div>
 
-      {/* ✅ STAFF HISTORY MODAL (WITH SYNCED HOLIDAY COLORS) */}
+      {/* ✅ STAFF HISTORY MODAL (WITH NEW CSS & COLORS) */}
       {showCalendar && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-6 rounded-2xl w-full max-w-md shadow-2xl relative">
@@ -736,29 +776,20 @@ const CompanyDashboard = () => {
               <p className="text-slate-500 text-sm">Attendance History</p>
             </div>
 
-            <div className="calendar-container">
+            <div className="calendar-wrapper custom-calendar">
               <Calendar 
                 tileClassName={getAttendanceTileClassName}
                 className="w-full border-none shadow-none text-sm"
               />
             </div>
 
+            {/* ✅ EXACT LEGEND MATCHING APP & EMPLOYEE DASHBOARD */}
             <div className="mt-4 flex gap-4 text-xs font-bold justify-center flex-wrap">
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-[#006400]"></div> <span>Present</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-[#FFEB3B] border border-slate-300"></div> <span>Late</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-[#B8860B]"></div> <span>Super Late</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-purple-200 border border-purple-300"></div> <span>Holiday</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-[#8B0000]"></div> <span>Absent</span>
-              </div>
+              <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_PRESENT}] rounded-full`}></span> Present</div>
+              <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_LATE}] border border-slate-300 rounded-full`}></span> Late</div>
+              <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_SUPER_LATE}] rounded-full`}></span> Super Late</div>
+              <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_HOLIDAY}] border border-[#66B2FF] rounded-full`}></span> Holiday</div>
+              <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_ABSENT}] rounded-full`}></span> Absent</div>
             </div>
           </div>
         </div>

@@ -9,6 +9,13 @@ import {
   CheckCircle, AlertTriangle, XCircle, BarChart3, AlertOctagon, LogIn
 } from 'lucide-react';
 
+// --- NEW EXACT APP COLORS ---
+const COLOR_PRESENT = '#009933'; // Green
+const COLOR_LATE = '#FFFF66';    // Yellow
+const COLOR_SUPER_LATE = '#CCCC00'; // Olive/Dark Yellow
+const COLOR_ABSENT = '#CC0000';  // Red
+const COLOR_HOLIDAY = '#99CCFF'; // Light Blue
+
 const EmployeeDashboard = () => {
   const [profile, setProfile] = useState(null);
   const [history, setHistory] = useState([]); 
@@ -17,7 +24,6 @@ const EmployeeDashboard = () => {
   const [stats, setStats] = useState({ present: 0, late: 0, superLate: 0, absent: 0 });
   const [isLoading, setIsLoading] = useState(false);
 
-  // ✅ NEW: Holiday State
   const [holidays, setHolidays] = useState({ weekly: [], single: [] });
 
   const navigate = useNavigate();
@@ -25,10 +31,9 @@ const EmployeeDashboard = () => {
   useEffect(() => {
     loadProfile();
     loadHistory();
-    loadHolidays(); // Load holidays when dashboard opens
+    loadHolidays();
   }, []);
 
-  // Recalculate stats whenever history OR holidays finish loading
   useEffect(() => {
     if (history.length > 0 || holidays.weekly.length > 0 || holidays.single.length > 0) {
       calculateMonthlyStats(selectedDate); 
@@ -61,7 +66,6 @@ const EmployeeDashboard = () => {
     }
   };
 
-  // ✅ NEW: Fetch Employee Read-Only Holidays
   const loadHolidays = async () => {
     try {
       const res = await api.get('/api/holidays');
@@ -88,7 +92,6 @@ const EmployeeDashboard = () => {
     setTodayLog(log || null);
   };
 
-  // ✅ NEW: Reusable function to check if a date is a company holiday
   const isHoliday = (date) => {
     const dateStr = formatDateKey(date);
     if (holidays.single.includes(dateStr)) return true;
@@ -130,9 +133,6 @@ const EmployeeDashboard = () => {
 
     for (let i = 1; i <= limitDay; i++) {
       const dayCheck = new Date(viewYear, viewMonth, i);
-      
-      // ✅ FIXED: Only count working days that are NOT holidays.
-      // This automatically removes the old hardcoded Saturday/Sunday logic!
       if (!isHoliday(dayCheck)) {
         workingDaysCount++;
       }
@@ -144,6 +144,7 @@ const EmployeeDashboard = () => {
     setStats({ present: presentCount, late: lateCount, superLate: superLateCount, absent: absentCount });
   };
 
+  // ✅ PERFECT CIRCLE COLOR LOGIC 
   const getTileClassName = ({ date, view }) => {
     if (view === 'month') {
       const dateKey = formatDateKey(date); 
@@ -152,22 +153,19 @@ const EmployeeDashboard = () => {
 
       const log = history.find(l => l.date_only === dateKey);
       
-      // 1. If attended, show Attendance Status
       if (log) {
         const status = log.status ? log.status.toLowerCase() : "";
-        if (status === 'super late') return 'bg-[#B8860B] text-white font-bold rounded-md'; 
-        if (status === 'late') return 'bg-[#FFEB3B] text-black font-bold rounded-md';      
-        return 'bg-[#006400] text-white font-bold rounded-md';                  
+        if (status === 'super late') return `!bg-[${COLOR_SUPER_LATE}] !text-black font-bold shadow-sm`; 
+        if (status === 'late') return `!bg-[${COLOR_LATE}] !text-black font-bold shadow-sm`;      
+        return `!bg-[${COLOR_PRESENT}] !text-white font-bold shadow-sm`;                  
       }
 
-      // 2. If no log, check if it's a Holiday
       if (isHoliday(date)) {
-        return 'bg-purple-100 text-purple-700 font-bold rounded-md border border-purple-200';
+        return `!bg-[${COLOR_HOLIDAY}] !text-[#003366] font-bold shadow-sm border border-[#66B2FF]`;
       }
 
-      // 3. If no log, NOT a holiday, and in the past -> Absent
       if (date < today) {
-        return 'bg-[#8B0000] text-white font-bold rounded-md'; 
+        return `!bg-[${COLOR_ABSENT}] !text-white font-bold shadow-sm`; 
       }
     }
     return null;
@@ -254,16 +252,53 @@ const EmployeeDashboard = () => {
             <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2"><CalendarIcon className="text-blue-600"/> My Attendance</h2>
               
-              {/* ✅ UPDATED LEGEND */}
+              {/* ✅ NEW APP-SYNCED LEGEND */}
               <div className="flex flex-wrap gap-3 text-xs font-bold justify-center">
-                <div className="flex items-center gap-1"><span className="w-3 h-3 bg-[#006400] rounded-full"></span> Present</div>
-                <div className="flex items-center gap-1"><span className="w-3 h-3 bg-[#FFEB3B] border border-slate-300 rounded-full"></span> Late</div>
-                <div className="flex items-center gap-1"><span className="w-3 h-3 bg-[#B8860B] rounded-full"></span> Super Late</div>
-                <div className="flex items-center gap-1"><span className="w-3 h-3 bg-purple-200 border border-purple-300 rounded-full"></span> Holiday</div>
-                <div className="flex items-center gap-1"><span className="w-3 h-3 bg-[#8B0000] rounded-full"></span> Absent</div>
+                <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_PRESENT}] rounded-full`}></span> Present</div>
+                <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_LATE}] border border-slate-300 rounded-full`}></span> Late</div>
+                <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_SUPER_LATE}] rounded-full`}></span> Super Late</div>
+                <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_HOLIDAY}] rounded-full`}></span> Holiday</div>
+                <div className="flex items-center gap-1"><span className={`w-3 h-3 bg-[${COLOR_ABSENT}] rounded-full`}></span> Absent</div>
               </div>
             </div>
             
+            {/* ✅ CUSTOM CSS TO FORCE PERFECT CIRCLES & REMOVE BLUE ACTIVE MARK */}
+            <style>{`
+              .custom-calendar .react-calendar__month-view__days {
+                gap: 4px 0; /* Add slight vertical spacing between rows */
+              }
+              .custom-calendar .react-calendar__tile {
+                aspect-ratio: 1/1; /* Forces square shape for bounding box */
+                border-radius: 50% !important; /* Perfect circle */
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                max-width: 44px; /* Keeps circles uniformly sized */
+                margin: 0 auto; 
+                padding: 0;
+              }
+              /* Strip default blue active backgrounds */
+              .custom-calendar .react-calendar__tile--active {
+                background: transparent !important;
+                color: inherit !important;
+              }
+              .custom-calendar .react-calendar__tile--active:enabled:hover,
+              .custom-calendar .react-calendar__tile--active:enabled:focus {
+                background: transparent !important;
+              }
+              /* Strip today's blue background, add an underline to the text instead */
+              .custom-calendar .react-calendar__tile--now {
+                background: transparent !important;
+              }
+              .custom-calendar .react-calendar__tile--now abbr {
+                font-weight: 900 !important;
+                text-decoration: underline;
+                text-underline-offset: 4px;
+                text-decoration-color: #111827; /* Dark slate underline */
+                text-decoration-thickness: 2px;
+              }
+            `}</style>
+
             <div className="calendar-wrapper custom-calendar">
               <Calendar 
                 onChange={handleDateClick} 
@@ -280,11 +315,14 @@ const EmployeeDashboard = () => {
             
             {todayLog ? (
               <div className="flex items-center gap-4">
-                <div className={`p-3 rounded-full ${
-                  todayLog.status?.toLowerCase() === 'super late' ? 'bg-orange-200 text-[#B8860B]' :
-                  todayLog.status?.toLowerCase() === 'late' ? 'bg-yellow-100 text-[#B8860B]' : 
-                  'bg-green-100 text-[#006400]'
-                }`}>
+                <div className="p-3 rounded-full" style={{
+                  backgroundColor: todayLog.status?.toLowerCase() === 'super late' ? `${COLOR_SUPER_LATE}33` : // 33 is 20% opacity in hex
+                                   todayLog.status?.toLowerCase() === 'late' ? `${COLOR_LATE}66` : 
+                                   `${COLOR_PRESENT}33`,
+                  color: todayLog.status?.toLowerCase() === 'super late' ? COLOR_SUPER_LATE :
+                         todayLog.status?.toLowerCase() === 'late' ? '#999900' : 
+                         COLOR_PRESENT
+                }}>
                   {todayLog.status?.toLowerCase() === 'super late' ? <AlertOctagon size={24}/> :
                    todayLog.status?.toLowerCase() === 'late' ? <AlertTriangle size={24}/> : 
                    <CheckCircle size={24}/>}
@@ -300,7 +338,8 @@ const EmployeeDashboard = () => {
                 </div>
               </div>
             ) : isHoliday(selectedDate) ? (
-              <div className="p-4 bg-purple-50 text-purple-700 rounded-lg font-bold flex items-center gap-2 border border-purple-100">
+              <div className="p-4 rounded-lg font-bold flex items-center gap-2 border" 
+                   style={{ backgroundColor: `${COLOR_HOLIDAY}33`, color: '#003366', borderColor: COLOR_HOLIDAY }}>
                  🎉 This day is marked as a company holiday!
               </div>
             ) : (
@@ -311,10 +350,10 @@ const EmployeeDashboard = () => {
           <div className="bg-slate-800 text-white p-6 rounded-2xl shadow-lg">
             <h3 className="font-bold mb-4 flex items-center gap-2 text-slate-200"><BarChart3 size={20}/> Monthly Summary</h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-              <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600"><div className="text-3xl font-bold text-[#4ade80] mb-1">{stats.present}</div><div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1"><CheckCircle size={12}/> Present</div></div>
-              <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600"><div className="text-3xl font-bold text-[#fde047] mb-1">{stats.late}</div><div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1"><AlertTriangle size={12}/> Late</div></div>
-              <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600"><div className="text-3xl font-bold text-[#fb923c] mb-1">{stats.superLate}</div><div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1"><AlertOctagon size={12}/> Super Late</div></div>
-              <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600"><div className="text-3xl font-bold text-[#f87171] mb-1">{stats.absent}</div><div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1"><XCircle size={12}/> Absent</div></div>
+              <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600"><div className={`text-3xl font-bold mb-1 text-[${COLOR_PRESENT}]`}>{stats.present}</div><div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1"><CheckCircle size={12}/> Present</div></div>
+              <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600"><div className={`text-3xl font-bold mb-1 text-[${COLOR_LATE}]`}>{stats.late}</div><div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1"><AlertTriangle size={12}/> Late</div></div>
+              <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600"><div className={`text-3xl font-bold mb-1 text-[${COLOR_SUPER_LATE}]`}>{stats.superLate}</div><div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1"><AlertOctagon size={12}/> Super Late</div></div>
+              <div className="bg-slate-700/50 p-4 rounded-xl border border-slate-600"><div className={`text-3xl font-bold mb-1 text-[${COLOR_ABSENT}]`}>{stats.absent}</div><div className="text-xs text-slate-400 uppercase font-bold flex justify-center items-center gap-1"><XCircle size={12}/> Absent</div></div>
             </div>
           </div>
         </div>
