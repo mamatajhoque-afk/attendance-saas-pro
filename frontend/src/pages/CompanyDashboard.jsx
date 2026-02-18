@@ -26,7 +26,7 @@ const CompanyDashboard = () => {
   const [newEmp, setNewEmp] = useState({ employee_id: '', name: '', password: '', role: 'Staff' });
   const [manualAtt, setManualAtt] = useState({ employee_id: '', type: 'check_in', date: '', time: '' });
   
-  // Search State (NEW)
+  // Search State
   const [searchQuery, setSearchQuery] = useState('');
 
   // Settings & Schedule
@@ -163,6 +163,62 @@ const CompanyDashboard = () => {
     return false;
   };
 
+  // ✅ PERFECT BULLETPROOF CALENDAR CLASSES
+  const getHolidayTileClassName = ({ date, view }) => {
+    if (view === 'month') {
+      if (isHoliday(date)) return 'tile-holiday';
+    }
+    return null;
+  };
+
+  const getAttendanceTileClassName = ({ date, view }) => {
+    if (view === 'month') {
+      const today = new Date();
+      today.setHours(0,0,0,0);
+
+      const dayLogs = attendanceHistory.filter(log => {
+        const logDate = new Date(log.timestamp);
+        return logDate.getDate() === date.getDate() &&
+               logDate.getMonth() === date.getMonth() &&
+               logDate.getFullYear() === date.getFullYear();
+      });
+
+      if (dayLogs.length > 0) {
+        const isSuperLate = dayLogs.some(log => log.status === 'Super Late');
+        const isLate = dayLogs.some(log => log.status === 'Late');
+        
+        if (isSuperLate) return 'tile-super-late'; 
+        if (isLate) return 'tile-late';      
+        return 'tile-present';                  
+      }
+
+      if (isHoliday(date)) return 'tile-holiday';
+
+      if (date < today) return 'tile-absent'; 
+    }
+    return null;
+  };
+
+  const formatTime = (isoString) => {
+    if (!isoString) return '--:--';
+    return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  // Filter Data
+  const filteredAttendance = auditData.attendance.filter(log => {
+    if (attFilter === 'late') return log.status === 'Late';
+    if (attFilter === 'super_late') return log.status === 'Super Late';
+    if (attFilter === 'emergency') return log.is_emergency_checkout === true;
+    return true; 
+  });
+
+  const filteredEmployeesList = employees.filter(emp => 
+    emp.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    emp.employee_id.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const weekDaysList = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
   // --- STANDARD FUNCTIONS ---
   const handleSaveSchedule = async (e) => {
     e.preventDefault();
@@ -275,71 +331,16 @@ const CompanyDashboard = () => {
     }
   };
 
-  // ✅ PERFECT BULLETPROOF CALENDAR CLASSES
-  const getHolidayTileClassName = ({ date, view }) => {
-    if (view === 'month') {
-      if (isHoliday(date)) return 'tile-holiday';
-    }
-    return null;
-  };
-
-  const getAttendanceTileClassName = ({ date, view }) => {
-    if (view === 'month') {
-      const today = new Date();
-      today.setHours(0,0,0,0);
-
-      const dayLogs = attendanceHistory.filter(log => {
-        const logDate = new Date(log.timestamp);
-        return logDate.getDate() === date.getDate() &&
-               logDate.getMonth() === date.getMonth() &&
-               logDate.getFullYear() === date.getFullYear();
-      });
-
-      if (dayLogs.length > 0) {
-        const isSuperLate = dayLogs.some(log => log.status === 'Super Late');
-        const isLate = dayLogs.some(log => log.status === 'Late');
-        
-        if (isSuperLate) return 'tile-super-late'; 
-        if (isLate) return 'tile-late';      
-        return 'tile-present';                  
-      }
-
-      if (isHoliday(date)) return 'tile-holiday';
-
-      if (date < today) return 'tile-absent'; 
-    }
-    return null;
-  };
-
-  const formatTime = (isoString) => {
-    if (!isoString) return '--:--';
-    return new Date(isoString).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
-  // Filter Data
-  const filteredAttendance = auditData.attendance.filter(log => {
-    if (attFilter === 'late') return log.status === 'Late';
-    if (attFilter === 'super_late') return log.status === 'Super Late';
-    if (attFilter === 'emergency') return log.is_emergency_checkout === true;
-    return true; 
-  });
-
-  const filteredEmployeesList = employees.filter(emp => 
-    emp.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    emp.employee_id.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const weekDaysList = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
   return (
     <div className="min-h-screen bg-slate-50 p-8 font-sans relative">
       
-      {/* ✅ UPGRADED PURE CSS FOR PERFECT CALENDAR SIZING AND COLORS */}
+      {/* ✅ UPGRADED PURE CSS FOR PIXEL-PERFECT ALIGNMENT */}
       <style>{`
         /* Make Calendar Box Much Larger */
         .custom-calendar {
           width: 100% !important;
-          max-width: 800px; /* Big and readable */
+          max-width: 800px; 
           margin: 0 auto;
           background: white;
           padding: 1.5rem;
@@ -354,8 +355,12 @@ const CompanyDashboard = () => {
           font-size: 1.25rem;
           color: #1f2937;
         }
-        /* Align Weekdays perfectly */
+
+        /* 1. ALIGN WEEKDAYS PERFECTLY */
         .custom-calendar .react-calendar__month-view__weekdays {
+          display: grid !important;
+          grid-template-columns: repeat(7, 1fr) !important;
+          text-align: center;
           text-transform: uppercase;
           font-weight: 800;
           font-size: 0.8rem;
@@ -363,15 +368,25 @@ const CompanyDashboard = () => {
           padding-bottom: 1rem;
         }
         .custom-calendar .react-calendar__month-view__weekdays__weekday {
-          padding: 0.5rem;
+          padding: 0 !important;
+          display: flex;
+          justify-content: center;
+          align-items: center;
         }
-        /* Force Grid to perfectly align dates under weekdays */
+        .custom-calendar .react-calendar__month-view__weekdays__weekday abbr {
+          text-decoration: none !important; /* Removes dotted underline */
+          cursor: default;
+        }
+
+        /* 2. ALIGN DATES PERFECTLY UNDER WEEKDAYS */
         .custom-calendar .react-calendar__month-view__days {
           display: grid !important;
           grid-template-columns: repeat(7, 1fr) !important;
           gap: 12px 0; 
+          justify-items: center; /* This perfectly centers the 48x48 circle in the column */
         }
-        /* Force 48x48 Perfectly Round Circles */
+        
+        /* 3. Force 48x48 Perfectly Round Circles */
         .custom-calendar .react-calendar__tile {
           height: 48px !important;
           width: 48px !important;
@@ -381,7 +396,7 @@ const CompanyDashboard = () => {
           display: flex;
           align-items: center;
           justify-content: center;
-          margin: 0 auto; 
+          margin: 0 !important; 
           padding: 0;
           font-size: 1rem;
           font-weight: 500;
@@ -459,11 +474,10 @@ const CompanyDashboard = () => {
             <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 h-fit">
               <h2 className="font-bold mb-4 text-slate-700">Add New Staff</h2>
               <form onSubmit={handleAddEmployee} className="space-y-4">
-                {/* ✅ MANDATORY FIELDS ADDED */}
-                <input required placeholder="ID (e.g. EMP01)" className="w-full border p-2 rounded" value={newEmp.employee_id} onChange={e => setNewEmp({...newEmp, employee_id: e.target.value})} />
-                <input required placeholder="Name" className="w-full border p-2 rounded" value={newEmp.name} onChange={e => setNewEmp({...newEmp, name: e.target.value})} />
-                <input required placeholder="Password" type="password" className="w-full border p-2 rounded" value={newEmp.password} onChange={e => setNewEmp({...newEmp, password: e.target.value})} />
-                <select className="w-full border p-2 rounded" value={newEmp.role} onChange={e => setNewEmp({...newEmp, role: e.target.value})}>
+                <input required placeholder="ID (e.g. EMP01)" className="w-full border p-2 rounded focus:outline-blue-500" value={newEmp.employee_id} onChange={e => setNewEmp({...newEmp, employee_id: e.target.value})} />
+                <input required placeholder="Name" className="w-full border p-2 rounded focus:outline-blue-500" value={newEmp.name} onChange={e => setNewEmp({...newEmp, name: e.target.value})} />
+                <input required placeholder="Password" type="password" className="w-full border p-2 rounded focus:outline-blue-500" value={newEmp.password} onChange={e => setNewEmp({...newEmp, password: e.target.value})} />
+                <select className="w-full border p-2 rounded focus:outline-blue-500" value={newEmp.role} onChange={e => setNewEmp({...newEmp, role: e.target.value})}>
                   <option value="Staff">Office Staff</option>
                   <option value="Marketing">Field Marketing</option>
                 </select>
@@ -472,17 +486,17 @@ const CompanyDashboard = () => {
             </div>
 
             <div className="lg:col-span-2 bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-              <div className="flex justify-between items-center mb-4 gap-4">
+              <div className="flex flex-col md:flex-row justify-between items-center mb-4 gap-4">
                 <h2 className="font-bold text-slate-700">Staff List</h2>
-                {/* ✅ SEARCH BAR IMPLEMENTED */}
-                <div className="relative w-full max-w-xs">
+                
+                <div className="relative w-full md:w-64">
                   <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
                   <input 
                     type="text" 
                     placeholder="Search by ID or Name..." 
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full border border-slate-300 pl-10 p-2 rounded bg-slate-50 text-sm focus:outline-none focus:border-blue-500"
+                    className="w-full border border-slate-300 pl-10 p-2 rounded bg-slate-50 text-sm focus:outline-none focus:border-blue-500 transition-colors"
                   />
                 </div>
               </div>
@@ -499,7 +513,7 @@ const CompanyDashboard = () => {
                   </thead>
                   <tbody>
                     {filteredEmployeesList.length === 0 ? (
-                      <tr><td colSpan="4" className="text-center p-4 text-slate-400">No staff found.</td></tr>
+                      <tr><td colSpan="4" className="text-center p-4 text-slate-400">No staff found matching "{searchQuery}".</td></tr>
                     ) : (
                       filteredEmployeesList.map(emp => (
                         <tr key={emp.id} className="border-b hover:bg-slate-50">
@@ -653,7 +667,7 @@ const CompanyDashboard = () => {
 
         {/* === TAB 4: HOLIDAYS === */}
         {activeTab === 'holidays' && (
-          <div className="max-w-4xl mx-auto space-y-6">
+          <div className="max-w-5xl mx-auto space-y-6">
             
             <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200">
               <h2 className="font-bold text-xl mb-2 text-slate-800 flex items-center gap-2">
@@ -688,7 +702,7 @@ const CompanyDashboard = () => {
                 <p className="text-slate-500 text-sm">Click any date on the calendar to mark it as a specific holiday. Click again to remove it.</p>
               </div>
 
-              {/* ✅ LARGER, CENTERED HOLIDAY CALENDAR */}
+              {/* ✅ PERFECTLY ALIGNED HOLIDAY CALENDAR */}
               <div className="custom-calendar border border-slate-100">
                 <Calendar 
                   onClickDay={handleToggleSingleHoliday} 
@@ -752,7 +766,6 @@ const CompanyDashboard = () => {
                           <td className="p-3 font-bold text-slate-700">{log.date}</td>
                           <td className="p-3 font-mono">{log.employee_id}</td>
                           <td className="p-3">
-                            {/* STATUS BADGES WITH NEW COLORS */}
                             <span className="px-2 py-1 rounded text-xs font-bold" style={{
                               backgroundColor: log.status === 'Super Late' ? COLOR_SUPER_LATE :
                                                log.status === 'Late' ? COLOR_LATE : COLOR_PRESENT,
@@ -843,7 +856,7 @@ const CompanyDashboard = () => {
 
       </div>
 
-      {/* ✅ LARGER STAFF HISTORY MODAL WITH PERFECT CALENDAR */}
+      {/* ✅ PERFECTLY ALIGNED STAFF HISTORY MODAL */}
       {showCalendar && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
           <div className="bg-white p-8 rounded-2xl w-full max-w-3xl shadow-2xl relative">
@@ -863,7 +876,6 @@ const CompanyDashboard = () => {
               />
             </div>
 
-            {/* ✅ EXACT LEGEND MATCHING APP */}
             <div className="mt-8 flex gap-6 text-sm font-bold justify-center flex-wrap">
               <div className="flex items-center gap-2"><span style={{ backgroundColor: COLOR_PRESENT }} className="w-4 h-4 rounded-full"></span> Present</div>
               <div className="flex items-center gap-2"><span style={{ backgroundColor: COLOR_LATE }} className="w-4 h-4 border border-slate-300 rounded-full"></span> Late</div>
