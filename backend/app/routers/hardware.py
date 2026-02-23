@@ -6,6 +6,7 @@ import pytz
 
 from app.db.database import get_db
 from app.db.models import HardwareDevice, Employee, Attendance, DoorEvent
+from app.websocket_manager import manager
 from app.schemas.schemas import HardwareLog, EmergencyOpen
 from app.core.config import settings
 
@@ -119,7 +120,7 @@ def push_hardware_log(
 
 # 2. EMERGENCY REMOTE OPEN (Admin Only)
 @router.post("/admin/door/emergency-open")
-def remote_open(
+async def remote_open(
     payload: EmergencyOpen, # (company_id, device_id, reason)
     db: Session = Depends(get_db)
     # NOTE: Add Admin Token dependency here in production
@@ -132,6 +133,10 @@ def remote_open(
         created_at=datetime.now(dhaka_zone)
     ))
     db.commit()
+    
+    # ⚡ SHOUT DOWN THE WEBSOCKET
+    await manager.trigger_door(payload.device_id)
+
     return {"status": "success", "message": "Emergency Command Logged"}
 
 # 3. SYNC ZKTECO (Cloud)

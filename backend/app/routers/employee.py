@@ -7,7 +7,8 @@ from typing import List, Optional
 from pydantic import BaseModel
 from jose import jwt
 
-from app.db.models import Company, Employee, Attendance, DepartmentSession, LocationLog, ShortLeave, CompanyHoliday # ✅ Added CompanyHoliday
+from app.db.models import Company, Employee, Attendance, DepartmentSession, LocationLog, ShortLeave, CompanyHoliday, HardwareDevice# ✅ Added CompanyHoliday
+from app.websocket_manager import manager
 from app.db.database import get_db
 from app.schemas.schemas import AttendanceMark, TrackingStart, LocationUpdate, EmergencyCheckout, ShortLeaveRequest
 from app.routers.auth import oauth2_scheme
@@ -136,7 +137,7 @@ def mark_attendance(
     return {"status": "error", "message": "Already checked in today"}
 
 @router.post("/api/unlock_door")
-def unlock_door(
+async def unlock_door(
     payload: EmployeeActionPayload,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_employee)
@@ -167,6 +168,12 @@ def unlock_door(
             pass
 
     db.commit()
+    
+    # ⚡ SHOUT DOWN THE WEBSOCKET
+    device = db.query(HardwareDevice).filter(HardwareDevice.company_id == user["company_id"]).first()
+    if device:
+        await manager.trigger_door(device.device_uid)
+
     return {"status": "success", "message": "Door unlocked"}
 
 @router.post("/api/mark_checkout")
@@ -261,7 +268,7 @@ def submit_excuse(
         raise HTTPException(status_code=500, detail="Database submission failed")
 
 @router.post("/api/short_leave/request")
-def request_short_leave(
+async def request_short_leave(
     payload: ShortLeaveRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_employee)
@@ -297,10 +304,16 @@ def request_short_leave(
     )
     db.add(new_leave)
     db.commit()
+    
+    # ⚡ SHOUT DOWN THE WEBSOCKET
+    device = db.query(HardwareDevice).filter(HardwareDevice.company_id == user["company_id"]).first()
+    if device:
+        await manager.trigger_door(device.device_uid)
+
     return {"status": "success", "message": "Short leave door unlocked for exit"}
 
 @router.post("/api/short_leave/return")
-def return_short_leave(
+async def return_short_leave(
     payload: EmployeeActionPayload,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_employee)
@@ -323,6 +336,12 @@ def return_short_leave(
 
     active_leave.return_time = now
     db.commit()
+    
+    # ⚡ SHOUT DOWN THE WEBSOCKET
+    device = db.query(HardwareDevice).filter(HardwareDevice.company_id == user["company_id"]).first()
+    if device:
+        await manager.trigger_door(device.device_uid)
+
     return {"status": "success", "message": "Door unlocked for entry. Welcome back!"}
 
 @router.get("/api/short_leave/today")

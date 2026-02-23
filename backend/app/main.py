@@ -6,6 +6,7 @@ from app.db.database import engine, Base
 
 # Import Routers
 from app.routers import auth, super_admin, company, employee, hardware
+from app.websocket_manager import ws_router
 
 # 1. SETUP LOGGING
 logging.basicConfig(level=logging.INFO)
@@ -42,6 +43,7 @@ app.include_router(super_admin.router, tags=["Super Admin"])
 app.include_router(company.router, tags=["Company Management"])
 app.include_router(employee.router, tags=["Employee App"])
 app.include_router(hardware.router, tags=["IoT & Hardware"])
+app.include_router(ws_router, tags=["Live Hardware Sockets"])  
 
 @app.get("/")
 def root():
