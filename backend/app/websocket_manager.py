@@ -49,10 +49,15 @@ async def hardware_websocket(websocket: WebSocket, device_id: str):
     await manager.connect(websocket, device_id)
     try:
         while True:
-            # Wait for "ping" from ESP32 to keep the connection alive
+            # Wait for data (including automatic heartbeat pings from the ESP32)
             data = await websocket.receive_text()
             if data == "ping":
                 await websocket.send_text("pong")
                 
-    except WebSocketDisconnect:
+    except Exception as e:
+        print(f"⚠️ Connection interrupted for {device_id}: {e}")
+        
+    finally:
+        # ⚡ THIS IS THE FIX: It guarantees the server always cleans up
+        # so the ESP32 can successfully reconnect when it tries again!
         manager.disconnect(device_id)
