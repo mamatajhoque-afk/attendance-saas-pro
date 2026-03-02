@@ -38,11 +38,11 @@ def get_authorized_device(
 # 1. PHONE APP / WEBSITE TRIGGER
 # ==========================================
 @router.post("/admin/door/emergency-open")
-async def remote_open(
+def remote_open(  # ⚡ FIX: Removed 'async' to prevent synchronous DB calls from freezing the server
     payload: EmergencyOpen, 
     db: Session = Depends(get_db)
 ):
-    # 1. Log the event in the database
+    # 1. Log the event in the database safely in a background thread
     db.add(DoorEvent(
         company_id=payload.company_id,
         event_type="ADMIN_OPEN",
@@ -52,7 +52,7 @@ async def remote_open(
     ))
     db.commit()
     
-    # 2. ⚡ PUT MAIL IN THE MAILBOX FOR THE ESP32
+    # 2. PUT MAIL IN THE MAILBOX FOR THE ESP32
     # The ESP32 will pick this up on its next 2-second check
     pending_door_commands[payload.device_id] = True
 
