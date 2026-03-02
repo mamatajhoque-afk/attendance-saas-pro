@@ -7,12 +7,14 @@ from typing import List, Optional
 from pydantic import BaseModel
 from jose import jwt
 
-from app.db.models import Company, Employee, Attendance, DepartmentSession, LocationLog, ShortLeave, CompanyHoliday, HardwareDevice# ✅ Added CompanyHoliday
-from app.websocket_manager import manager
+from app.db.models import Company, Employee, Attendance, DepartmentSession, LocationLog, ShortLeave, CompanyHoliday, HardwareDevice
 from app.db.database import get_db
 from app.schemas.schemas import AttendanceMark, TrackingStart, LocationUpdate, EmergencyCheckout, ShortLeaveRequest
 from app.routers.auth import oauth2_scheme
 from app.core.config import settings
+
+# ✅ Import the new Polling Mailbox instead of WebSockets
+from app.routers.hardware import pending_door_commands
 
 router = APIRouter()
 
@@ -137,7 +139,7 @@ def mark_attendance(
     return {"status": "error", "message": "Already checked in today"}
 
 @router.post("/api/unlock_door")
-async def unlock_door(
+def unlock_door(
     payload: EmployeeActionPayload,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_employee)
@@ -169,10 +171,10 @@ async def unlock_door(
 
     db.commit()
     
-    # ⚡ SHOUT DOWN THE WEBSOCKET
+    # ⚡ QUEUE COMMAND FOR HTTP POLLING
     device = db.query(HardwareDevice).filter(HardwareDevice.company_id == user["company_id"]).first()
     if device:
-        await manager.trigger_door(device.device_uid)
+        pending_door_commands[device.device_uid] = True
 
     return {"status": "success", "message": "Door unlocked"}
 
@@ -268,7 +270,7 @@ def submit_excuse(
         raise HTTPException(status_code=500, detail="Database submission failed")
 
 @router.post("/api/short_leave/request")
-async def request_short_leave(
+def request_short_leave(
     payload: ShortLeaveRequest,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_employee)
@@ -305,15 +307,15 @@ async def request_short_leave(
     db.add(new_leave)
     db.commit()
     
-    # ⚡ SHOUT DOWN THE WEBSOCKET
+    # ⚡ QUEUE COMMAND FOR HTTP POLLING
     device = db.query(HardwareDevice).filter(HardwareDevice.company_id == user["company_id"]).first()
     if device:
-        await manager.trigger_door(device.device_uid)
+        pending_door_commands[device.device_uid] = True
 
     return {"status": "success", "message": "Short leave door unlocked for exit"}
 
 @router.post("/api/short_leave/return")
-async def return_short_leave(
+def return_short_leave(
     payload: EmployeeActionPayload,
     db: Session = Depends(get_db),
     user: dict = Depends(get_current_employee)
@@ -337,10 +339,10 @@ async def return_short_leave(
     active_leave.return_time = now
     db.commit()
     
-    # ⚡ SHOUT DOWN THE WEBSOCKET
+    # ⚡ QUEUE COMMAND FOR HTTP POLLING
     device = db.query(HardwareDevice).filter(HardwareDevice.company_id == user["company_id"]).first()
     if device:
-        await manager.trigger_door(device.device_uid)
+        pending_door_commands[device.device_uid] = True
 
     return {"status": "success", "message": "Door unlocked for entry. Welcome back!"}
 
