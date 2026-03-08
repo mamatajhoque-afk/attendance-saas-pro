@@ -25,7 +25,7 @@ app = FastAPI(
 origins = [
     "http://localhost:5173",
     "http://localhost:3000",
-    "https://attendance-frontends.onrender.com"
+    "https://attendence-saas.onrender.com"
 ]
 
 app.add_middleware(
